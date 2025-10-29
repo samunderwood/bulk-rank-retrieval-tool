@@ -191,7 +191,6 @@ mode = st.radio("Mode", ["Live (immediate)", "Standard (batched)"], horizontal=T
 colA, colB = st.columns([1,1])
 with colA:
     domain = st.text_input("Target domain", placeholder="example.com (no https)")
-    country_iso = st.text_input("Country ISO", value="gb")
 with colB:
     device = st.radio("Device", ["desktop", "mobile"], horizontal=True)
     os_name = st.selectbox("OS", ["windows","macos"] if device=="desktop" else ["android","ios"])
@@ -199,9 +198,25 @@ with colB:
 headers, auth = make_headers()
 sess = make_session(*auth)
 
-# Fetch lists
-loc_df = get_locations(sess, headers, country_iso or None)
+# Fetch all locations to build country list
+all_loc_df = get_locations(sess, headers, None)
 lang_df = get_languages(sess, headers)
+
+# Build searchable country list
+if not all_loc_df.empty:
+    countries = all_loc_df[all_loc_df["location_type"] == "Country"].copy()
+    countries = countries.sort_values("location_name").drop_duplicates(subset=["country_iso_code"])
+    country_options = [f"{row.location_name} [{row.country_iso_code}]" for row in countries.itertuples()]
+    # Find default (United Kingdom)
+    default_idx = next((i for i, opt in enumerate(country_options) if "[GB]" in opt.upper()), 0)
+    country_selection = st.selectbox("Country", country_options, index=default_idx)
+    # Extract ISO code from selection
+    country_iso = country_selection.split("[")[-1].split("]")[0] if "[" in country_selection else "gb"
+else:
+    country_iso = st.text_input("Country ISO", value="gb")
+
+# Fetch locations for selected country
+loc_df = get_locations(sess, headers, country_iso or None)
 lang_options = [f"{r.language_name} [{r.language_code}]" for r in lang_df.itertuples()] or ["English [en]"]
 language = st.selectbox("Language", lang_options, index=(lang_options.index("English [en]") if "English [en]" in lang_options else 0))
 
