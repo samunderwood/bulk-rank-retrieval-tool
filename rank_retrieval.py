@@ -11,7 +11,7 @@ from dataforseo_client import SERPClient
 
 
 def parse_serp_record(result: dict, keyword: str, lang: str, device: str, 
-                     os_name: str, depth: int) -> dict:
+                     os_name: str, depth: int, target_domain: str = None) -> dict:
     """
     Parse a SERP result and extract rank information.
     
@@ -47,10 +47,37 @@ def parse_serp_record(result: dict, keyword: str, lang: str, device: str,
     items = [i for i in (result.get("items") or []) if i.get("type") == "organic"]
     
     if not items:
-        record["note"] = f"Target not found within depth={depth}"
+        record["note"] = f"No organic results found"
         return record
     
-    # Get the best (lowest) rank
+    # If target_domain is specified, filter by domain (for Standard mode)
+    if target_domain:
+        from urllib.parse import urlparse
+        
+        # Normalize target domain
+        target_clean = target_domain.lower().replace('www.', '').replace('http://', '').replace('https://', '').strip('/')
+        
+        matching_items = []
+        for item in items:
+            url = item.get("url", "")
+            if url:
+                try:
+                    parsed = urlparse(url if url.startswith('http') else f'http://{url}')
+                    item_domain = parsed.netloc.lower().replace('www.', '')
+                    
+                    # Check if domain matches (exact or subdomain)
+                    if item_domain == target_clean or item_domain.endswith('.' + target_clean):
+                        matching_items.append(item)
+                except:
+                    continue
+        
+        if not matching_items:
+            record["note"] = f"Domain not found in top {depth} results"
+            return record
+        
+        items = matching_items
+    
+    # Get the best (lowest) rank from matching items
     best = sorted(
         items, 
         key=lambda i: (i.get("rank_group") or 10**9, i.get("rank_absolute") or 10**9)
@@ -139,7 +166,7 @@ def live_mode_rank_check(
             
             return parse_serp_record(
                 result_list[0], keyword, language_code, device,
-                payload[0]["os"], depth
+                payload[0]["os"], depth, target_domain=domain
             )
             
         except Exception as e:
@@ -228,12 +255,13 @@ def standard_mode_rank_check(
         chunk = keywords[idx:idx + size]
         
         # Build payload
+        # Note: Standard mode does NOT use 'target' parameter
+        # Per DataForSEO docs: target only works in Live mode
+        # We get all results and filter client-side in parse_serp_record()
         payload = [{
             "keyword": kw,
             "language_code": language_code,
             "location_code": int(location_code),
-            "target": domain,
-            "include_subdomains": bool(include_subdomains),
             "device": device,
             "depth": int(depth),
             "os": os_name or ("windows" if device == "desktop" else "android"),
@@ -274,7 +302,7 @@ def standard_mode_rank_check(
     # Phase 2: Fetch results
     st.write(f"**Phase 2:** Waiting for results (this may take 1-3 minutes)...")
     return fetch_task_results(
-        client, task_ids, language_code, device, os_name, depth,
+        client, task_ids, domain, language_code, device, os_name, depth,
         fetch_parallel, poll_interval, stop_event
     )
 
@@ -282,6 +310,7 @@ def standard_mode_rank_check(
 def fetch_task_results(
     client: SERPClient,
     task_ids: List[str],
+    domain: str,
     language_code: str,
     device: str,
     os_name: str,
@@ -333,7 +362,7 @@ def fetch_task_results(
             result = result_list[0]
             keyword = result.get("keyword") or (result.get("keyword_info") or {}).get("keyword")
             
-            return parse_serp_record(result, keyword, language_code, device, os_name, depth)
+            return parse_serp_record(result, keyword, language_code, device, os_name, depth, target_domain=domain)
             
         except Exception as e:
             return {"keyword": None, "found": False, "note": f"Fetch error {task_id}: {e}"}
