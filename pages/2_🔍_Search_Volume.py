@@ -36,10 +36,11 @@ if not client:
 
 # Get available locations
 @st.cache_data(ttl=3600)
-def get_locations():
+def get_locations(_login: str, _password: str):
     """Fetch available locations for clickstream data."""
     try:
-        response = client.get_locations_and_languages()
+        temp_client = KeywordsDataClient(login=_login, password=_password)
+        response = temp_client.get_locations_and_languages()
         if response.get("status_code") == 20000:
             tasks = response.get("tasks", [])
             if tasks and tasks[0].get("result"):
@@ -63,7 +64,7 @@ with col1:
 
 with col2:
     # Location selector
-    locations = get_locations()
+    locations = get_locations(st.session_state.user_login, st.session_state.user_password)
     
     if locations:
         location_names = {f"{loc.get('location_name')} ({loc.get('location_code')})": loc.get('location_code') 
