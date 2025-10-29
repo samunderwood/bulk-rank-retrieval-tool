@@ -21,7 +21,7 @@ A Streamlit-based web application for bulk keyword rank checking using the DataF
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/YOUR_USERNAME/bulk-rank-retrieval-tool.git
+git clone https://github.com/samunderwood/bulk-rank-retrieval-tool.git
 cd bulk-rank-retrieval-tool
 ```
 
@@ -97,4 +97,3 @@ MIT License
 ## Credits
 
 Built with [Streamlit](https://streamlit.io/) and [DataForSEO API](https://dataforseo.com/)
-
