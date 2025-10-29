@@ -295,7 +295,7 @@ def render_results_table(df: pd.DataFrame, domain: str = ""):
     col3.metric("Not Found", total_count - found_count)
     
     # Display table
-    st.dataframe(df, use_container_width=True, height=400)
+    st.dataframe(df, width="stretch", height=400)
     
     # Download button
     csv = df.to_csv(index=False).encode("utf-8")
@@ -314,5 +314,5 @@ def render_results_table(df: pd.DataFrame, domain: str = ""):
             preview_cols = [col for col in ["keyword", "organic_rank", "absolute_rank", "url", "title"] 
                            if col in df.columns]
             found_df = df[df["found"] == True][preview_cols].head(10)
-            st.dataframe(found_df, use_container_width=True)
+            st.dataframe(found_df, width="stretch")
 

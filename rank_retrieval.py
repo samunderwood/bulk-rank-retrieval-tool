@@ -247,8 +247,13 @@ def standard_mode_rank_check(
                 # 20100 = successfully created task
                 if status_code == 20100 and task.get("result"):
                     task_ids.append(task["result"][0]["id"])
+                elif status_code != 20100:
+                    # Log non-success status codes for debugging
+                    st.warning(f"Task failed with status {status_code}: {task.get('status_message', 'Unknown error')}")
         except Exception as e:
-            st.warning(f"Error posting batch: {e}")
+            st.error(f"Error posting batch: {e}")
+            import traceback
+            st.code(traceback.format_exc())
         
         idx += size
         post_bar.progress(min(1.0, idx / len(keywords)), text=f"Posted {idx}/{len(keywords)} keywords")
