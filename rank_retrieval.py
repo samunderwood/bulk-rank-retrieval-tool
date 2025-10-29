@@ -44,19 +44,18 @@ def parse_serp_record(result: dict, keyword: str, lang: str, device: str,
     }
     
     # Filter for organic results only
-    items = [i for i in (result.get("items") or []) if i.get("type") == "organic"]
+    all_items = result.get("items") or []
+    items = [i for i in all_items if i.get("type") == "organic"]
     
-    # DEBUG: Show what we got
-    import streamlit as st
-    if hasattr(st, 'session_state'):  # Only if in Streamlit context
-        st.write(f"🔍 **DEBUG** for '{keyword}':")
-        st.write(f"   - Total items in result: {len(result.get('items', []))}")
-        st.write(f"   - Organic items found: {len(items)}")
-        if target_domain:
-            st.write(f"   - Looking for domain: {target_domain}")
+    st.write(f"🔍 **DEBUG parse_serp_record:**")
+    st.write(f"   - Total items: {len(all_items)}")
+    st.write(f"   - Item types: {set(i.get('type') for i in all_items) if all_items else 'None'}")
+    st.write(f"   - Organic items: {len(items)}")
+    st.write(f"   - target_domain param: {target_domain}")
     
     if not items:
         record["note"] = f"No organic results found"
+        st.warning(f"   ⚠️ No organic items to process")
         return record
     
     # If target_domain is specified, filter by domain (for Standard mode)
@@ -82,21 +81,9 @@ def parse_serp_record(result: dict, keyword: str, lang: str, device: str,
         
         if not matching_items:
             record["note"] = f"Domain not found in top {depth} results"
-            # DEBUG: Show what domains we DID find
-            if hasattr(st, 'session_state'):
-                found_domains = []
-                for item in items[:10]:  # Show first 10
-                    url = item.get("url", "")
-                    try:
-                        parsed = urlparse(url if url.startswith('http') else f'http://{url}')
-                        found_domains.append(parsed.netloc)
-                    except:
-                        pass
-                st.write(f"   - Domains found in results: {', '.join(found_domains[:5])}")
             return record
         
         items = matching_items
-        st.write(f"   - ✅ Matched {len(matching_items)} items for domain {target_domain}")
     
     # Get the best (lowest) rank from matching items
     best = sorted(
@@ -172,7 +159,15 @@ def live_mode_rank_check(
         
         try:
             response = client.post_live(payload)
+            
+            # DEBUG: Show full response structure
+            st.write(f"🔍 **DEBUG Live Mode - '{keyword}':**")
+            st.write(f"   - Response status: {response.get('status_code')} - {response.get('status_message')}")
+            st.write(f"   - Tasks count: {len(response.get('tasks', []))}")
+            
             task = response.get("tasks", [{}])[0]
+            st.write(f"   - Task status: {task.get('status_code')} - {task.get('status_message')}")
+            st.write(f"   - Task result_count: {task.get('result_count')}")
             
             if task.get("status_code") != 20000:
                 return {
@@ -182,15 +177,42 @@ def live_mode_rank_check(
                 }
             
             result_list = task.get("result", [])
+            st.write(f"   - Result array length: {len(result_list)}")
+            
             if not result_list:
+                st.error(f"   ❌ No result array returned")
                 return {"keyword": keyword, "found": False, "note": "No result array"}
+            
+            result_obj = result_list[0]
+            st.write(f"   - Result object keys: {list(result_obj.keys())}")
+            st.write(f"   - Result keyword: {result_obj.get('keyword')}")
+            st.write(f"   - Result type: {result_obj.get('type')}")
+            st.write(f"   - Result se_results_count: {result_obj.get('se_results_count')}")
+            st.write(f"   - Result items_count: {result_obj.get('items_count')}")
+            st.write(f"   - Result items length: {len(result_obj.get('items', []))}")
+            
+            items = result_obj.get('items', [])
+            if items:
+                st.write(f"   - Item types found: {set(i.get('type') for i in items)}")
+                organic_items = [i for i in items if i.get('type') == 'organic']
+                st.write(f"   - Organic items count: {len(organic_items)}")
+                
+                if organic_items:
+                    st.write(f"   - First 3 organic URLs:")
+                    for idx, item in enumerate(organic_items[:3], 1):
+                        st.write(f"      {idx}. Rank {item.get('rank_absolute')}: {item.get('url')}")
+            else:
+                st.error(f"   ❌ No items in result object")
             
             return parse_serp_record(
                 result_list[0], keyword, language_code, device,
-                payload[0]["os"], depth, target_domain=domain
+                payload[0]["os"], depth, target_domain=None  # Live mode: target already filtered by API
             )
             
         except Exception as e:
+            import traceback
+            st.error(f"❌ Exception in live_worker for '{keyword}': {e}")
+            st.code(traceback.format_exc())
             return {"keyword": keyword, "found": False, "note": f"Error: {e}"}
     
     # Execute with rate limiting
