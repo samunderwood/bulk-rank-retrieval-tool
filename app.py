@@ -34,7 +34,7 @@ with col2:
 
 with col3:
     st.markdown("### 📈 Google Trends")
-    st.markdown("Analyze keyword popularity trends over time with related topics and queries. Compare up to 5 keywords.")
+    st.markdown("Extract popularity trends, regional interest, and related topics/queries for unlimited keywords individually.")
     google_trends_btn = st.button("Go to Google Trends", use_container_width=True, type="primary", key="btn_trends")
 
 # Handle navigation

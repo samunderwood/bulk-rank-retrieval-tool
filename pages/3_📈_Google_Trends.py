@@ -1,6 +1,6 @@
 """
 Google Trends Tool
-Get keyword popularity trends over time with related topics and queries.
+Extract keyword popularity trends, regional interest, and related topics/queries for multiple keywords.
 """
 
 import streamlit as st
@@ -18,13 +18,11 @@ from dataforseo_client import KeywordsDataClient
 setup_page_config(title="Google Trends - DataForSEO Tools", layout="wide")
 
 st.title("📈 Google Trends Tool")
-st.markdown("Analyze keyword popularity trends, regional interest, and discover related topics and queries.")
+st.markdown("Extract keyword popularity trends, regional interest, and discover related topics and queries for multiple keywords.")
 
 # Initialize session state for results
-if "gt_results" not in st.session_state:
-    st.session_state.gt_results = None
-if "gt_mode" not in st.session_state:
-    st.session_state.gt_mode = None
+if "gt_results_df" not in st.session_state:
+    st.session_state.gt_results_df = None
 if "gt_config" not in st.session_state:
     st.session_state.gt_config = {}
 
@@ -81,18 +79,18 @@ mode = st.radio(
     "Mode",
     options=["Live", "Standard"],
     horizontal=True,
-    help="Live: Immediate results (slower, limited to 250 tasks/min). Standard: Queued processing (faster for bulk, up to 2000 tasks/min)."
+    help="Live: Immediate results (slower, max 250/min). Standard: Queued processing (faster for bulk, max 2000/min). Each keyword processed individually."
 )
 
 col1, col2 = st.columns([2, 1])
 
 with col1:
-    # Keywords input (max 5)
+    # Keywords input (unlimited)
     keywords_input = st.text_area(
-        "Keywords (one per line, max 5)",
-        height=150,
-        placeholder="seo api\nrank tracker\nkeyword research\n...",
-        help="Enter up to 5 keywords to compare. For topics/queries lists, use only 1 keyword."
+        "Keywords (one per line)",
+        height=200,
+        placeholder="seo api\nrank tracker\nkeyword research\ncontent marketing\n...",
+        help="Enter keywords, one per line. Each keyword will be processed individually. Large lists will be batched automatically."
     )
 
 with col2:
@@ -144,6 +142,16 @@ with col2:
         language_code = lang_options[selected_language]
     else:
         language_code = "en"
+    
+    st.info("""
+        **About Bulk Extraction:**
+        
+        Each keyword processed individually with its own trend data, regional interest, and related topics/queries.
+        
+        - Unlimited keywords (auto-batched)
+        - Individual trend analysis per keyword
+        - Export to CSV/Excel with all metrics
+    """)
 
 # Advanced settings expander
 with st.expander("⚙️ Advanced Settings"):
@@ -180,11 +188,11 @@ with st.expander("⚙️ Advanced Settings"):
     
     with col_b:
         # Item types
-        st.write("Data to retrieve:")
-        get_graph = st.checkbox("Interest over time (graph)", value=True)
-        get_map = st.checkbox("Regional interest (map)", value=True)
-        get_topics = st.checkbox("Related topics", value=False, help="Only works with 1 keyword")
-        get_queries = st.checkbox("Related queries", value=False, help="Only works with 1 keyword")
+        st.write("Data to retrieve (per keyword):")
+        get_graph = st.checkbox("Interest over time", value=True)
+        get_map = st.checkbox("Regional interest", value=True)
+        get_topics = st.checkbox("Related topics", value=True)
+        get_queries = st.checkbox("Related queries", value=True)
         
         item_types = []
         if get_graph:
@@ -209,152 +217,247 @@ if run:
         st.error("⚠️ Please enter at least one keyword.")
         st.stop()
     
-    if len(kws) > 5:
-        st.error(f"⚠️ Maximum 5 keywords allowed. You entered {len(kws)}.")
-        st.stop()
-    
-    # Check if requesting topics/queries with multiple keywords
-    if (get_topics or get_queries) and len(kws) > 1:
-        st.warning("⚠️ Related topics and queries only work with 1 keyword. Using first keyword only for these items.")
-    
     # Display execution summary
     st.info(f"""
         **Execution Summary:**
         - Mode: {mode}
-        - Keywords: {', '.join(kws)}
+        - Keywords: {len(kws):,} keywords (processed individually)
         - Type: {trends_type}
         - Location: {selected_location}
         - Time Range: {'Custom' if use_date_range else time_range}
     """)
     
-    # Execute request
+    # Execute batched requests
     try:
-        if mode == "Live":
-            # Live mode - immediate results
-            with st.spinner("Fetching trends data... (this may take 5-10 seconds)"):
-                response = client.trends_explore_live(
-                    keywords=kws,
-                    location_code=location_code,
-                    location_name=location_name,
-                    language_code=language_code,
-                    type=trends_type,
-                    date_from=date_from.strftime("%Y-%m-%d") if use_date_range and date_from else None,
-                    date_to=date_to.strftime("%Y-%m-%d") if use_date_range and date_to else None,
-                    time_range=time_range,
-                    item_types=item_types if item_types else None
-                )
-            
-            # Parse results
-            if response.get("status_code") != 20000:
-                st.error(f"API Error: {response.get('status_message')}")
-                st.stop()
-            
-            tasks = response.get("tasks", [])
-            if not tasks:
-                st.error("No data returned from API.")
-                st.stop()
-            
-            task = tasks[0]
-            if task.get("status_code") != 20000:
-                st.error(f"Task Error ({task.get('status_code')}): {task.get('status_message')}")
-                st.stop()
-            
-            results = task.get("result", [])
-            if not results:
-                st.error("No trends data found.")
-                st.stop()
-            
-            # Store results
-            st.session_state.gt_results = results[0]
-            st.session_state.gt_mode = mode
-            st.session_state.gt_config = {
-                "keywords": kws,
-                "type": trends_type,
-                "location": selected_location
-            }
-            
-            st.success(f"✅ **Complete!** Retrieved trends data for {len(kws)} keyword(s)")
+        all_results = []
+        progress_bar = st.progress(0)
+        status_text = st.empty()
         
-        else:
-            # Standard mode - post and poll
-            with st.spinner("Posting trends task..."):
-                response = client.trends_explore_post(
-                    keywords=kws,
-                    location_code=location_code,
-                    location_name=location_name,
-                    language_code=language_code,
-                    type=trends_type,
-                    date_from=date_from.strftime("%Y-%m-%d") if use_date_range and date_from else None,
-                    date_to=date_to.strftime("%Y-%m-%d") if use_date_range and date_to else None,
-                    time_range=time_range,
-                    item_types=item_types if item_types else None,
-                    tag=f"trends_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
-                )
+        for idx, keyword in enumerate(kws):
+            # Update progress
+            progress = (idx + 1) / len(kws)
+            progress_bar.progress(progress)
+            status_text.text(f"Processing keyword {idx + 1} of {len(kws)}: '{keyword}'...")
             
-            # Check task posted successfully
-            if response.get("status_code") != 20000:
-                st.error(f"API Error: {response.get('status_message')}")
-                st.stop()
+            try:
+                if mode == "Live":
+                    # Live mode - immediate results
+                    response = client.trends_explore_live(
+                        keywords=[keyword],  # Single keyword
+                        location_code=location_code,
+                        location_name=location_name,
+                        language_code=language_code,
+                        type=trends_type,
+                        date_from=date_from.strftime("%Y-%m-%d") if use_date_range and date_from else None,
+                        date_to=date_to.strftime("%Y-%m-%d") if use_date_range and date_to else None,
+                        time_range=time_range,
+                        item_types=item_types if item_types else None,
+                        tag=f"bulk_{idx}"
+                    )
+                else:
+                    # Standard mode - post task
+                    response = client.trends_explore_post(
+                        keywords=[keyword],
+                        location_code=location_code,
+                        location_name=location_name,
+                        language_code=language_code,
+                        type=trends_type,
+                        date_from=date_from.strftime("%Y-%m-%d") if use_date_range and date_from else None,
+                        date_to=date_to.strftime("%Y-%m-%d") if use_date_range and date_to else None,
+                        time_range=time_range,
+                        item_types=item_types if item_types else None,
+                        tag=f"bulk_{idx}"
+                    )
+                
+                # Parse response
+                if response.get("status_code") != 20000:
+                    st.warning(f"API Error for '{keyword}': {response.get('status_message')}")
+                    continue
+                
+                tasks = response.get("tasks", [])
+                if not tasks:
+                    st.warning(f"No data for '{keyword}'")
+                    continue
+                
+                task = tasks[0]
+                
+                if mode == "Live":
+                    # Live mode - results are immediate
+                    if task.get("status_code") != 20000:
+                        st.warning(f"Task error for '{keyword}': {task.get('status_message')}")
+                        continue
+                    
+                    results = task.get("result", [])
+                    if results:
+                        all_results.append({
+                            "keyword": keyword,
+                            "data": results[0],
+                            "task_id": task.get("id")
+                        })
+                else:
+                    # Standard mode - store task ID for later retrieval
+                    if task.get("status_code") != 20100:
+                        st.warning(f"Failed to post task for '{keyword}': {task.get('status_message')}")
+                        continue
+                    
+                    task_id = task.get("id")
+                    if task_id:
+                        all_results.append({
+                            "keyword": keyword,
+                            "task_id": task_id,
+                            "status": "pending"
+                        })
             
-            tasks = response.get("tasks", [])
-            if not tasks:
-                st.error("Failed to post task.")
-                st.stop()
+            except Exception as e:
+                st.warning(f"Error processing '{keyword}': {str(e)}")
+                continue
+        
+        # Complete progress
+        progress_bar.progress(1.0)
+        status_text.empty()
+        
+        if not all_results:
+            st.error("No data retrieved for any keyword.")
+            st.stop()
+        
+        # For Standard mode, poll for results
+        if mode == "Standard":
+            st.info(f"✅ Posted {len(all_results)} tasks. Now retrieving results...")
             
-            task = tasks[0]
-            if task.get("status_code") != 20100:
-                st.error(f"Task Error ({task.get('status_code')}): {task.get('status_message')}")
-                st.stop()
-            
-            task_id = task.get("id")
-            if not task_id:
-                st.error("No task ID returned.")
-                st.stop()
-            
-            st.info(f"✅ Task posted successfully (ID: {task_id})")
-            
-            # Poll for results
             progress_bar = st.progress(0)
             status_text = st.empty()
             
-            max_wait = 120  # 2 minutes
-            poll_interval = 5  # 5 seconds
-            elapsed = 0
+            max_wait = 180  # 3 minutes
+            poll_interval = 5
+            start_time = time.time()
+            completed = 0
             
-            while elapsed < max_wait:
-                status_text.text(f"Waiting for results... ({elapsed}s / {max_wait}s)")
+            while completed < len(all_results) and (time.time() - start_time) < max_wait:
+                for result in all_results:
+                    if result.get("status") == "pending":
+                        try:
+                            task_response = client.trends_explore_get_result(result["task_id"])
+                            
+                            if task_response.get("status_code") == 20000:
+                                result_tasks = task_response.get("tasks", [])
+                                if result_tasks:
+                                    result_task = result_tasks[0]
+                                    if result_task.get("status_code") == 20000:
+                                        task_results = result_task.get("result", [])
+                                        if task_results:
+                                            result["data"] = task_results[0]
+                                            result["status"] = "completed"
+                                            completed += 1
+                        except:
+                            pass
                 
-                # Check if task is ready
-                result_response = client.trends_explore_get_result(task_id)
+                progress_bar.progress(min(completed / len(all_results), 0.95))
+                status_text.text(f"Retrieved {completed} of {len(all_results)} results...")
                 
-                if result_response.get("status_code") == 20000:
-                    result_tasks = result_response.get("tasks", [])
-                    if result_tasks:
-                        result_task = result_tasks[0]
-                        if result_task.get("status_code") == 20000:
-                            # Task complete
-                            results = result_task.get("result", [])
-                            if results:
-                                st.session_state.gt_results = results[0]
-                                st.session_state.gt_mode = mode
-                                st.session_state.gt_config = {
-                                    "keywords": kws,
-                                    "type": trends_type,
-                                    "location": selected_location
-                                }
-                                
-                                progress_bar.progress(1.0)
-                                status_text.empty()
-                                st.success(f"✅ **Complete!** Retrieved trends data for {len(kws)} keyword(s)")
-                                break
-                
-                # Wait before next poll
-                time.sleep(poll_interval)
-                elapsed += poll_interval
-                progress_bar.progress(min(elapsed / max_wait, 0.95))
-            else:
-                st.warning(f"⏱️ Task did not complete within {max_wait} seconds. Task ID: {task_id}")
-                st.info("You can check the task status later using the Task ID above.")
+                if completed < len(all_results):
+                    time.sleep(poll_interval)
+            
+            progress_bar.progress(1.0)
+            status_text.empty()
+            
+            # Filter to completed only
+            all_results = [r for r in all_results if r.get("status") == "completed"]
+            
+            if not all_results:
+                st.error("No tasks completed within timeout period.")
+                st.stop()
+        
+        # Process results into dataframe
+        rows = []
+        
+        for result in all_results:
+            keyword = result["keyword"]
+            data = result.get("data", {})
+            items = data.get("items", [])
+            
+            row = {
+                "keyword": keyword,
+                "location": selected_location,
+                "type": trends_type,
+                "check_url": data.get("check_url", "")
+            }
+            
+            # Extract graph data (interest over time)
+            for item in items:
+                if item.get("type") == "google_trends_graph":
+                    graph_data = item.get("data", [])
+                    if graph_data:
+                        # Calculate averages
+                        all_values = []
+                        for point in graph_data:
+                            values = point.get("values", [])
+                            if values and values[0] is not None:
+                                all_values.append(values[0])
+                        
+                        if all_values:
+                            row["avg_interest"] = sum(all_values) / len(all_values)
+                            row["max_interest"] = max(all_values)
+                            row["min_interest"] = min(all_values)
+                            row["data_points"] = len(all_values)
+            
+            # Extract map data (regional interest)
+            for item in items:
+                if item.get("type") == "google_trends_map":
+                    map_data = item.get("data", [])
+                    if map_data:
+                        # Get top region
+                        sorted_regions = sorted(map_data, key=lambda x: x.get("values", [0])[0] if x.get("values") else 0, reverse=True)
+                        if sorted_regions:
+                            top_region = sorted_regions[0]
+                            row["top_region"] = top_region.get("geo_name")
+                            row["top_region_interest"] = top_region.get("values", [0])[0] if top_region.get("values") else 0
+                            row["num_regions"] = len([r for r in map_data if r.get("values") and r.get("values")[0] is not None])
+            
+            # Extract topics data
+            for item in items:
+                if item.get("type") == "google_trends_topics_list":
+                    topics_data = item.get("data", {})
+                    top_topics = topics_data.get("top", [])
+                    rising_topics = topics_data.get("rising", [])
+                    
+                    row["num_top_topics"] = len(top_topics)
+                    row["num_rising_topics"] = len(rising_topics)
+                    
+                    if top_topics:
+                        row["top_topic"] = top_topics[0].get("topic_title")
+                    if rising_topics:
+                        row["top_rising_topic"] = rising_topics[0].get("topic_title")
+            
+            # Extract queries data
+            for item in items:
+                if item.get("type") == "google_trends_queries_list":
+                    queries_data = item.get("data", {})
+                    top_queries = queries_data.get("top", [])
+                    rising_queries = queries_data.get("rising", [])
+                    
+                    row["num_top_queries"] = len(top_queries)
+                    row["num_rising_queries"] = len(rising_queries)
+                    
+                    if top_queries:
+                        row["top_query"] = top_queries[0].get("query")
+                    if rising_queries:
+                        row["top_rising_query"] = rising_queries[0].get("query")
+            
+            rows.append(row)
+        
+        # Create dataframe
+        df = pd.DataFrame(rows)
+        
+        # Store in session state
+        st.session_state.gt_results_df = df
+        st.session_state.gt_config = {
+            "mode": mode,
+            "type": trends_type,
+            "location": selected_location,
+            "keywords_count": len(kws)
+        }
+        
+        st.success(f"✅ **Complete!** Retrieved trends data for {len(df):,} keywords")
     
     except Exception as e:
         st.error(f"Error: {e}")
@@ -362,8 +465,8 @@ if run:
         st.code(traceback.format_exc())
 
 # Display results from session state if available
-if st.session_state.gt_results is not None:
-    results = st.session_state.gt_results
+if st.session_state.gt_results_df is not None:
+    df = st.session_state.gt_results_df
     config = st.session_state.gt_config
     
     st.divider()
@@ -373,240 +476,94 @@ if st.session_state.gt_results is not None:
         st.subheader("📊 Results")
     with col2:
         if st.button("🗑️ Clear Results", use_container_width=True):
-            st.session_state.gt_results = None
-            st.session_state.gt_mode = None
+            st.session_state.gt_results_df = None
             st.session_state.gt_config = {}
             st.rerun()
     
-    # Display check URL
-    if results.get("check_url"):
-        st.markdown(f"🔗 [View on Google Trends]({results.get('check_url')})")
+    st.caption(f"Mode: {config.get('mode')} | Type: {config.get('type')} | Location: {config.get('location')} | Keywords: {config.get('keywords_count'):,}")
     
-    st.caption(f"Keywords: {', '.join(config.get('keywords', []))} | Type: {config.get('type')} | Location: {config.get('location')}")
+    # Create tabs
+    tab1, tab2, tab3 = st.tabs(["📋 Table View", "📈 Charts & Analytics", "💾 Export"])
     
-    # Process items
-    items = results.get("items", [])
+    with tab1:
+        # Summary metrics
+        col1, col2, col3, col4 = st.columns(4)
+        col1.metric("Total Keywords", len(df))
+        
+        if "avg_interest" in df.columns:
+            col2.metric("Avg Interest", f"{df['avg_interest'].mean():.1f}")
+            col3.metric("Highest Interest", f"{df['avg_interest'].max():.1f}")
+            col4.metric("Lowest Interest", f"{df['avg_interest'].min():.1f}")
+        
+        # Table
+        st.dataframe(df, width="stretch", height=400)
     
-    if not items:
-        st.warning("No items returned in results.")
-    else:
-        # Create tabs for different visualizations
-        tab_labels = []
-        tab_contents = []
+    with tab2:
+        st.subheader("📈 Keyword Analysis")
         
-        # Check what items we have
-        has_graph = any(item.get("type") == "google_trends_graph" for item in items)
-        has_map = any(item.get("type") == "google_trends_map" for item in items)
-        has_topics = any(item.get("type") == "google_trends_topics_list" for item in items)
-        has_queries = any(item.get("type") == "google_trends_queries_list" for item in items)
-        
-        if has_graph:
-            tab_labels.append("📈 Interest Over Time")
-        if has_map:
-            tab_labels.append("🗺️ Regional Interest")
-        if has_topics:
-            tab_labels.append("💡 Related Topics")
-        if has_queries:
-            tab_labels.append("🔍 Related Queries")
-        tab_labels.append("💾 Export")
-        
-        tabs = st.tabs(tab_labels)
-        tab_idx = 0
-        
-        # Interest Over Time tab
-        if has_graph:
-            with tabs[tab_idx]:
-                for item in items:
-                    if item.get("type") == "google_trends_graph":
-                        st.subheader(item.get("title", "Interest Over Time"))
-                        
-                        data = item.get("data", [])
-                        keywords = item.get("keywords", [])
-                        
-                        if data:
-                            # Create dataframe for plotting
-                            rows = []
-                            for point in data:
-                                date = point.get("date_from")
-                                values = point.get("values", [])
-                                
-                                for idx, value in enumerate(values):
-                                    if value is not None:
-                                        rows.append({
-                                            "date": date,
-                                            "keyword": keywords[idx] if idx < len(keywords) else f"Keyword {idx+1}",
-                                            "interest": value
-                                        })
-                            
-                            if rows:
-                                df = pd.DataFrame(rows)
-                                df["date"] = pd.to_datetime(df["date"])
-                                
-                                # Line chart
-                                fig = px.line(
-                                    df,
-                                    x="date",
-                                    y="interest",
-                                    color="keyword",
-                                    title="Keyword Popularity Over Time",
-                                    labels={"interest": "Interest (0-100)", "date": "Date", "keyword": "Keyword"}
-                                )
-                                fig.update_layout(hovermode="x unified", height=500)
-                                st.plotly_chart(fig, use_container_width=True)
-                                
-                                # Summary stats
-                                st.subheader("Summary Statistics")
-                                summary_df = df.groupby("keyword")["interest"].agg(["mean", "max", "min", "std"]).round(1)
-                                summary_df.columns = ["Average", "Peak", "Lowest", "Std Dev"]
-                                st.dataframe(summary_df, width="stretch")
-            tab_idx += 1
-        
-        # Regional Interest tab
-        if has_map:
-            with tabs[tab_idx]:
-                for item in items:
-                    if item.get("type") == "google_trends_map":
-                        st.subheader(item.get("title", "Regional Interest"))
-                        
-                        data = item.get("data", [])
-                        keywords = item.get("keywords", [])
-                        
-                        if data:
-                            # Create dataframe
-                            rows = []
-                            for region in data:
-                                geo_name = region.get("geo_name")
-                                values = region.get("values", [])
-                                
-                                for idx, value in enumerate(values):
-                                    if value is not None:
-                                        rows.append({
-                                            "region": geo_name,
-                                            "keyword": keywords[idx] if idx < len(keywords) else f"Keyword {idx+1}",
-                                            "interest": value
-                                        })
-                            
-                            if rows:
-                                df = pd.DataFrame(rows)
-                                
-                                # Top regions bar chart
-                                top_regions = df.nlargest(20, "interest")
-                                
-                                fig = px.bar(
-                                    top_regions,
-                                    x="interest",
-                                    y="region",
-                                    color="keyword",
-                                    orientation="h",
-                                    title="Top 20 Regions by Interest",
-                                    labels={"interest": "Interest (0-100)", "region": "Region", "keyword": "Keyword"}
-                                )
-                                fig.update_layout(yaxis={'categoryorder':'total ascending'}, height=600)
-                                st.plotly_chart(fig, use_container_width=True)
-                                
-                                # Full data table
-                                with st.expander("📊 View All Regions"):
-                                    st.dataframe(df.sort_values("interest", ascending=False), width="stretch", height=400)
-            tab_idx += 1
-        
-        # Related Topics tab
-        if has_topics:
-            with tabs[tab_idx]:
-                for item in items:
-                    if item.get("type") == "google_trends_topics_list":
-                        st.subheader(item.get("title", "Related Topics"))
-                        
-                        data = item.get("data", {})
-                        
-                        col_t1, col_t2 = st.columns(2)
-                        
-                        with col_t1:
-                            st.markdown("### 🔥 Top Topics")
-                            top_topics = data.get("top", [])
-                            
-                            if top_topics:
-                                topics_df = pd.DataFrame([{
-                                    "Topic": t.get("topic_title"),
-                                    "Type": t.get("topic_type"),
-                                    "Value": t.get("value")
-                                } for t in top_topics[:25]])
-                                st.dataframe(topics_df, width="stretch", height=400)
-                            else:
-                                st.info("No top topics data available.")
-                        
-                        with col_t2:
-                            st.markdown("### 📈 Rising Topics")
-                            rising_topics = data.get("rising", [])
-                            
-                            if rising_topics:
-                                rising_df = pd.DataFrame([{
-                                    "Topic": t.get("topic_title"),
-                                    "Type": t.get("topic_type"),
-                                    "Growth": f"{t.get('value')}%"
-                                } for t in rising_topics[:25]])
-                                st.dataframe(rising_df, width="stretch", height=400)
-                            else:
-                                st.info("No rising topics data available.")
-            tab_idx += 1
-        
-        # Related Queries tab
-        if has_queries:
-            with tabs[tab_idx]:
-                for item in items:
-                    if item.get("type") == "google_trends_queries_list":
-                        st.subheader(item.get("title", "Related Queries"))
-                        
-                        data = item.get("data", {})
-                        
-                        col_q1, col_q2 = st.columns(2)
-                        
-                        with col_q1:
-                            st.markdown("### 🔥 Top Queries")
-                            top_queries = data.get("top", [])
-                            
-                            if top_queries:
-                                queries_df = pd.DataFrame([{
-                                    "Query": q.get("query"),
-                                    "Value": q.get("value")
-                                } for q in top_queries[:25]])
-                                st.dataframe(queries_df, width="stretch", height=400)
-                            else:
-                                st.info("No top queries data available.")
-                        
-                        with col_q2:
-                            st.markdown("### 📈 Rising Queries")
-                            rising_queries = data.get("rising", [])
-                            
-                            if rising_queries:
-                                rising_df = pd.DataFrame([{
-                                    "Query": q.get("query"),
-                                    "Growth": f"{q.get('value')}%" if isinstance(q.get('value'), (int, float)) else q.get('value')
-                                } for q in rising_queries[:25]])
-                                st.dataframe(rising_df, width="stretch", height=400)
-                            else:
-                                st.info("No rising queries data available.")
-            tab_idx += 1
-        
-        # Export tab
-        with tabs[tab_idx]:
-            st.subheader("💾 Download Results")
+        if "avg_interest" in df.columns:
+            # Top keywords by interest
+            top_keywords = df.nlargest(20, "avg_interest")
             
-            # Prepare export data
-            export_data = {
-                "config": config,
-                "results": results
-            }
-            
-            # JSON download
-            import json
-            json_str = json.dumps(export_data, indent=2, default=str)
-            st.download_button(
-                label="📥 Download JSON",
-                data=json_str,
-                file_name=f"google_trends_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
-                mime="application/json",
-                use_container_width=True
+            fig = px.bar(
+                top_keywords,
+                x="avg_interest",
+                y="keyword",
+                orientation="h",
+                title="Top 20 Keywords by Average Interest",
+                labels={"avg_interest": "Average Interest (0-100)", "keyword": "Keyword"}
             )
+            fig.update_layout(yaxis={'categoryorder':'total ascending'}, height=600)
+            st.plotly_chart(fig, use_container_width=True)
             
-            st.caption("Full API response including all data points and metadata")
-
+            # Interest distribution
+            fig2 = px.histogram(
+                df,
+                x="avg_interest",
+                nbins=30,
+                title="Interest Distribution",
+                labels={"avg_interest": "Average Interest", "count": "Number of Keywords"}
+            )
+            st.plotly_chart(fig2, use_container_width=True)
+        else:
+            st.info("No interest data available for visualization.")
+    
+    with tab3:
+        st.subheader("💾 Download Results")
+        
+        # CSV download
+        csv = df.to_csv(index=False)
+        st.download_button(
+            label="📥 Download CSV",
+            data=csv,
+            file_name=f"google_trends_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+            mime="text/csv",
+            use_container_width=True
+        )
+        
+        # Excel download
+        buffer = BytesIO()
+        with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
+            # Results sheet
+            df.to_excel(writer, sheet_name='Trends Data', index=False)
+            
+            # Summary sheet
+            if "avg_interest" in df.columns:
+                summary_data = {
+                    'Metric': ['Total Keywords', 'Avg Interest', 'Max Interest', 'Min Interest'],
+                    'Value': [
+                        len(df),
+                        f"{df['avg_interest'].mean():.2f}",
+                        f"{df['avg_interest'].max():.2f}",
+                        f"{df['avg_interest'].min():.2f}"
+                    ]
+                }
+                pd.DataFrame(summary_data).to_excel(writer, sheet_name='Summary', index=False)
+        
+        st.download_button(
+            label="📥 Download Excel (with Summary)",
+            data=buffer.getvalue(),
+            file_name=f"google_trends_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            use_container_width=True
+        )
