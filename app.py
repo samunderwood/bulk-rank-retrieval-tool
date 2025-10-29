@@ -310,7 +310,7 @@ if run:
     
     # Execute rank checking
     try:
-        if mode.startswith("Live"):
+    if mode.startswith("Live"):
             rows = live_mode_rank_check(
                 client=client,
                 keywords=kws,
@@ -325,7 +325,7 @@ if run:
                 rpm=rpm,
                 stop_event=st.session_state.stop_evt
             )
-        else:
+    else:
             rows = standard_mode_rank_check(
                 client=client,
                 keywords=kws,
@@ -343,13 +343,13 @@ if run:
             )
         
         # Prepare results dataframe
-        df = pd.DataFrame(rows)
+    df = pd.DataFrame(rows)
         cols = [
             "keyword", "found", "organic_rank", "absolute_rank", "type",
             "url", "title", "language_code", "se_domain", "location_name",
             "device", "os", "depth", "note"
         ]
-        df = df.reindex(columns=cols)
+    df = df.reindex(columns=cols)
         
         # Calculate metrics
         found_count = df["found"].sum() if "found" in df.columns else 0
@@ -368,6 +368,18 @@ if run:
         status_container = st.empty()
         with status_container:
             st.success(f"✅ **Complete!** Found {found_count}/{total_count} keywords ranking")
+        
+        # Auto-download CSV
+        csv = df.to_csv(index=False)
+        filename = f"rank_results_{domain}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+        st.download_button(
+            label="⬇️ Download CSV (Auto-generated)",
+            data=csv,
+            file_name=filename,
+            mime="text/csv",
+            type="primary",
+            use_container_width=True
+        )
         
         # Display results in tabs
         st.divider()
