@@ -11,7 +11,7 @@ from dataforseo_client import SERPClient
 
 
 def parse_serp_record(result: dict, keyword: str, lang: str, device: str, 
-                     os_name: str, depth: int, target_domain: str = None) -> dict:
+                     os_name: str, depth: int, target_domain: str = None, debug_logs: list = None) -> dict:
     """
     Parse a SERP result and extract rank information.
     
@@ -47,15 +47,18 @@ def parse_serp_record(result: dict, keyword: str, lang: str, device: str,
     all_items = result.get("items") or []
     items = [i for i in all_items if i.get("type") == "organic"]
     
-    st.write(f"🔍 **DEBUG parse_serp_record:**")
-    st.write(f"   - Total items: {len(all_items)}")
-    st.write(f"   - Item types: {set(i.get('type') for i in all_items) if all_items else 'None'}")
-    st.write(f"   - Organic items: {len(items)}")
-    st.write(f"   - target_domain param: {target_domain}")
+    # Thread-safe debug logging
+    if debug_logs is not None:
+        debug_logs.append(f"🔍 parse_serp_record for '{keyword}':")
+        debug_logs.append(f"   - Total items: {len(all_items)}")
+        debug_logs.append(f"   - Item types: {set(i.get('type') for i in all_items) if all_items else 'None'}")
+        debug_logs.append(f"   - Organic items: {len(items)}")
+        debug_logs.append(f"   - target_domain: {target_domain}")
     
     if not items:
         record["note"] = f"No organic results found"
-        st.warning(f"   ⚠️ No organic items to process")
+        if debug_logs is not None:
+            debug_logs.append(f"   ⚠️ No organic items found")
         return record
     
     # If target_domain is specified, filter by domain (for Standard mode)
@@ -64,6 +67,9 @@ def parse_serp_record(result: dict, keyword: str, lang: str, device: str,
         
         # Normalize target domain
         target_clean = target_domain.lower().replace('www.', '').replace('http://', '').replace('https://', '').strip('/')
+        
+        if debug_logs is not None:
+            debug_logs.append(f"   - Filtering for domain: {target_clean}")
         
         matching_items = []
         for item in items:
@@ -76,11 +82,18 @@ def parse_serp_record(result: dict, keyword: str, lang: str, device: str,
                     # Check if domain matches (exact or subdomain)
                     if item_domain == target_clean or item_domain.endswith('.' + target_clean):
                         matching_items.append(item)
+                        if debug_logs is not None:
+                            debug_logs.append(f"   - ✅ MATCH: {item_domain} at rank {item.get('rank_absolute')}")
                 except:
                     continue
         
+        if debug_logs is not None:
+            debug_logs.append(f"   - Matching items found: {len(matching_items)}")
+        
         if not matching_items:
             record["note"] = f"Domain not found in top {depth} results"
+            if debug_logs is not None:
+                debug_logs.append(f"   ⚠️ No matches for domain '{target_clean}'")
             return record
         
         items = matching_items
@@ -139,6 +152,7 @@ def live_mode_rank_check(
     """
     spacing = 60.0 / max(1, rpm)
     rows = []
+    debug_logs = []  # Thread-safe debug log collection
     bar = st.progress(0.0, text="Submitting…")
     
     def live_worker(keyword: str):
@@ -160,16 +174,17 @@ def live_mode_rank_check(
         try:
             response = client.post_live(payload)
             
-            # DEBUG: Show full response structure
-            st.write(f"🔍 **DEBUG Live Mode - '{keyword}':**")
-            st.write(f"   - Response status: {response.get('status_code')} - {response.get('status_message')}")
-            st.write(f"   - Tasks count: {len(response.get('tasks', []))}")
+            # Thread-safe debug logging
+            debug_logs.append(f"\n🔍 **Live Mode - '{keyword}':**")
+            debug_logs.append(f"   - Response status: {response.get('status_code')} - {response.get('status_message')}")
+            debug_logs.append(f"   - Tasks count: {len(response.get('tasks', []))}")
             
             task = response.get("tasks", [{}])[0]
-            st.write(f"   - Task status: {task.get('status_code')} - {task.get('status_message')}")
-            st.write(f"   - Task result_count: {task.get('result_count')}")
+            debug_logs.append(f"   - Task status: {task.get('status_code')} - {task.get('status_message')}")
+            debug_logs.append(f"   - Task result_count: {task.get('result_count')}")
             
             if task.get("status_code") != 20000:
+                debug_logs.append(f"   ❌ Task failed with status {task.get('status_code')}")
                 return {
                     "keyword": keyword,
                     "found": False,
@@ -177,42 +192,42 @@ def live_mode_rank_check(
                 }
             
             result_list = task.get("result", [])
-            st.write(f"   - Result array length: {len(result_list)}")
+            debug_logs.append(f"   - Result array length: {len(result_list)}")
             
             if not result_list:
-                st.error(f"   ❌ No result array returned")
+                debug_logs.append(f"   ❌ No result array returned")
                 return {"keyword": keyword, "found": False, "note": "No result array"}
             
             result_obj = result_list[0]
-            st.write(f"   - Result object keys: {list(result_obj.keys())}")
-            st.write(f"   - Result keyword: {result_obj.get('keyword')}")
-            st.write(f"   - Result type: {result_obj.get('type')}")
-            st.write(f"   - Result se_results_count: {result_obj.get('se_results_count')}")
-            st.write(f"   - Result items_count: {result_obj.get('items_count')}")
-            st.write(f"   - Result items length: {len(result_obj.get('items', []))}")
+            debug_logs.append(f"   - Result keyword: {result_obj.get('keyword')}")
+            debug_logs.append(f"   - Result type: {result_obj.get('type')}")
+            debug_logs.append(f"   - Result se_results_count: {result_obj.get('se_results_count')}")
+            debug_logs.append(f"   - Result items_count: {result_obj.get('items_count')}")
+            debug_logs.append(f"   - Result items length: {len(result_obj.get('items', []))}")
             
             items = result_obj.get('items', [])
             if items:
-                st.write(f"   - Item types found: {set(i.get('type') for i in items)}")
+                item_types = set(i.get('type') for i in items)
+                debug_logs.append(f"   - Item types found: {item_types}")
                 organic_items = [i for i in items if i.get('type') == 'organic']
-                st.write(f"   - Organic items count: {len(organic_items)}")
+                debug_logs.append(f"   - Organic items count: {len(organic_items)}")
                 
                 if organic_items:
-                    st.write(f"   - First 3 organic URLs:")
+                    debug_logs.append(f"   - First 3 organic URLs:")
                     for idx, item in enumerate(organic_items[:3], 1):
-                        st.write(f"      {idx}. Rank {item.get('rank_absolute')}: {item.get('url')}")
+                        debug_logs.append(f"      {idx}. Rank {item.get('rank_absolute')}: {item.get('url')}")
             else:
-                st.error(f"   ❌ No items in result object")
+                debug_logs.append(f"   ❌ No items in result object")
             
             return parse_serp_record(
                 result_list[0], keyword, language_code, device,
-                payload[0]["os"], depth, target_domain=None  # Live mode: target already filtered by API
+                payload[0]["os"], depth, target_domain=None, debug_logs=debug_logs  # Live mode: target already filtered by API
             )
             
         except Exception as e:
             import traceback
-            st.error(f"❌ Exception in live_worker for '{keyword}': {e}")
-            st.code(traceback.format_exc())
+            debug_logs.append(f"❌ Exception in live_worker for '{keyword}': {e}")
+            debug_logs.append(f"   Traceback: {traceback.format_exc()}")
             return {"keyword": keyword, "found": False, "note": f"Error: {e}"}
     
     # Execute with rate limiting
@@ -246,6 +261,12 @@ def live_mode_rank_check(
         for kw in keywords:
             if kw not in done_keywords:
                 rows.append({"keyword": kw, "found": False, "note": "Stopped before start"})
+    
+    # Display debug logs after all threads complete
+    if debug_logs:
+        with st.expander("🐛 Debug Logs (Click to expand)", expanded=True):
+            for log in debug_logs:
+                st.text(log)
     
     return rows
 
