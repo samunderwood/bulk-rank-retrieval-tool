@@ -46,6 +46,15 @@ def parse_serp_record(result: dict, keyword: str, lang: str, device: str,
     # Filter for organic results only
     items = [i for i in (result.get("items") or []) if i.get("type") == "organic"]
     
+    # DEBUG: Show what we got
+    import streamlit as st
+    if hasattr(st, 'session_state'):  # Only if in Streamlit context
+        st.write(f"🔍 **DEBUG** for '{keyword}':")
+        st.write(f"   - Total items in result: {len(result.get('items', []))}")
+        st.write(f"   - Organic items found: {len(items)}")
+        if target_domain:
+            st.write(f"   - Looking for domain: {target_domain}")
+    
     if not items:
         record["note"] = f"No organic results found"
         return record
@@ -73,9 +82,21 @@ def parse_serp_record(result: dict, keyword: str, lang: str, device: str,
         
         if not matching_items:
             record["note"] = f"Domain not found in top {depth} results"
+            # DEBUG: Show what domains we DID find
+            if hasattr(st, 'session_state'):
+                found_domains = []
+                for item in items[:10]:  # Show first 10
+                    url = item.get("url", "")
+                    try:
+                        parsed = urlparse(url if url.startswith('http') else f'http://{url}')
+                        found_domains.append(parsed.netloc)
+                    except:
+                        pass
+                st.write(f"   - Domains found in results: {', '.join(found_domains[:5])}")
             return record
         
         items = matching_items
+        st.write(f"   - ✅ Matched {len(matching_items)} items for domain {target_domain}")
     
     # Get the best (lowest) rank from matching items
     best = sorted(
