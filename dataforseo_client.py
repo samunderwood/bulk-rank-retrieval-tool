@@ -240,10 +240,11 @@ class KeywordsDataClient(DataForSEOClient):
         Returns:
             dict: Response with available locations and languages
         """
-        return self._make_request(
+        response = self._request(
             "GET",
-            "/v3/keywords_data/clickstream_data/locations_and_languages"
+            "keywords_data/clickstream_data/locations_and_languages"
         )
+        return response.json()
     
     def bulk_search_volume(self, keywords: list, location_code: int, tag: str = None):
         """
@@ -267,9 +268,10 @@ class KeywordsDataClient(DataForSEOClient):
         if tag:
             payload[0]["tag"] = tag
         
-        return self._make_request(
+        response = self._request(
             "POST",
-            "/v3/keywords_data/clickstream_data/bulk_search_volume/live",
-            json=payload
+            "keywords_data/clickstream_data/bulk_search_volume/live",
+            data=payload
         )
+        return response.json()
 
