@@ -51,12 +51,10 @@ DATAFORSEO_API_KEY = "your_api_key"
 ### Public Deployment (Streamlit Cloud)
 
 1. Visit the deployed app
-2. Enter your DataForSEO credentials in the sidebar:
-   - Choose "Login & Password" or "API Key"
-   - Enter your credentials
-   - Credentials are verified before proceeding
-3. Configure your search parameters
-4. Enter keywords and click "Run"
+2. Enter your DataForSEO login and password in the sidebar
+3. Credentials are verified automatically
+4. Configure your search parameters
+5. Enter keywords and click "Run"
 
 ### Local Development
 

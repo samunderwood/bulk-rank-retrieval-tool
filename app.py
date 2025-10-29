@@ -213,17 +213,19 @@ st.info("👈 **Enter your DataForSEO credentials in the sidebar to get started.
 admin_auth = make_headers()
 
 # Credentials input section
-st.sidebar.header("🔐 API Credentials")
-st.sidebar.info("This app requires DataForSEO API credentials. Don't have an account? [Sign up here](https://dataforseo.com/)")
+st.sidebar.header("🔐 DataForSEO Credentials")
+st.sidebar.info("Don't have an account? [Sign up here](https://dataforseo.com/)")
 
-use_own_creds = st.sidebar.checkbox("Use my own credentials", value=True)
-
-if use_own_creds:
-    auth_method = st.sidebar.radio("Authentication Method", ["Login & Password", "API Key"])
-    
-    if auth_method == "Login & Password":
-        user_login = st.sidebar.text_input("DataForSEO Login", type="default")
-        user_password = st.sidebar.text_input("DataForSEO Password", type="password")
+# Check if admin credentials exist in secrets
+if admin_auth:
+    use_admin = st.sidebar.checkbox("Use configured credentials", value=False, 
+                                     help="Use credentials from Streamlit secrets (for private deployments)")
+    if use_admin:
+        headers, auth = admin_auth
+        st.sidebar.success("✅ Using configured credentials")
+    else:
+        user_login = st.sidebar.text_input("Login", type="default", placeholder="your_login")
+        user_password = st.sidebar.text_input("Password", type="password", placeholder="your_password")
         
         if user_login and user_password:
             headers = {"Content-Type": "application/json"}
@@ -231,25 +233,17 @@ if use_own_creds:
         else:
             st.warning("⚠️ Please enter your DataForSEO login and password in the sidebar to continue.")
             st.stop()
-    else:
-        user_api_key = st.sidebar.text_input("DataForSEO API Key", type="password", 
-                                             help="Format: login:password or base64 encoded")
-        
-        if user_api_key:
-            headers = {"Content-Type": "application/json"}
-            token = base64.b64encode(user_api_key.encode()).decode() if ":" in user_api_key else user_api_key
-            headers["Authorization"] = f"Basic {token}"
-            auth = ("header", None)
-        else:
-            st.warning("⚠️ Please enter your DataForSEO API key in the sidebar to continue.")
-            st.stop()
 else:
-    # Use admin credentials from secrets (only works if secrets are configured)
-    if not admin_auth:
-        st.error("⚠️ **No admin credentials configured**")
-        st.info("Please check 'Use my own credentials' in the sidebar and enter your DataForSEO credentials.")
+    # No admin credentials - user must provide their own
+    user_login = st.sidebar.text_input("Login", type="default", placeholder="your_login")
+    user_password = st.sidebar.text_input("Password", type="password", placeholder="your_password")
+    
+    if user_login and user_password:
+        headers = {"Content-Type": "application/json"}
+        auth = ("basic", (user_login, user_password))
+    else:
+        st.warning("⚠️ Please enter your DataForSEO login and password in the sidebar to continue.")
         st.stop()
-    headers, auth = admin_auth
 
 sess = make_session(*auth)
 
