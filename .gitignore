@@ -56,8 +56,9 @@ env/
 htmlcov/
 
 # Cursor AI
-.cursorrules/
 .cursor/
+# Note: .cursorrules/ contains helpful project documentation
+# Keep it tracked for team/future reference
 
 # Dev containers (optional - uncomment if not using)
 # .devcontainer/

@@ -1,0 +1,176 @@
+---
+description: DataForSEO API status codes reference - use when working with API responses
+globs: *dataforseo*.py,*rank*.py,*client*.py
+---
+
+# DataForSEO API Status Codes
+
+Official reference: https://docs.dataforseo.com/v3/appendix-errors/
+
+## HTTP Response Codes
+
+| Code | Message | Description |
+|------|---------|-------------|
+| 200 | OK | Request successful |
+| 401 | Unauthorized | Invalid credentials |
+| 402 | Payment Required | Billing issue |
+| 404 | Not Found | Endpoint doesn't exist |
+| 500 | Internal Server Error | Server error, retry later |
+
+## Internal Status Codes
+
+### Success Codes (20000-20999)
+
+| Code | Message | Description | Action |
+|------|---------|-------------|--------|
+| 20000 | Ok. | Request completed successfully | Process results |
+| 20100 | Task Created. | Task successfully created | Store task ID |
+
+### Client Error Codes (40000-40999)
+
+#### Task Creation Errors (40000-40099)
+
+| Code | Message | Action |
+|------|---------|--------|
+| 40000 | You can set only one task at a time. | Send single task |
+| 40001 | This id is used by another client | Use unique task ID |
+| 40006 | You can set no more than 100 tasks at a time. | Batch max 100 tasks |
+
+#### Authentication & Authorization (40100-40199)
+
+| Code | Message | Action |
+|------|---------|--------|
+| 40100 | You are not authorized | Check credentials |
+| 40101 | Internal SE server error | Retry request |
+| 40102 | No Search Results | Domain not found in top results |
+| 40103 | Task execution failed | Retry with similar params |
+
+#### Payment & Rate Limits (40200-40299)
+
+| Code | Message | Action |
+|------|---------|--------|
+| 40200 | Payment Required | Recharge balance |
+| 40201 | Unusual activity detected | Contact support |
+| 40202 | Rate-limit exceeded (2000/min) | Implement rate limiting |
+| 40203 | Cost limit exceeded | Adjust limits in dashboard |
+| 40209 | Too many simultaneous queries (max 30) | Reduce parallelism |
+| 40210 | Insufficient Funds | Add funds to account |
+
+#### Task Not Found Errors (40400-40499)
+
+| Code | Message | Action |
+|------|---------|--------|
+| 40400 | Not found | Check request URL |
+| 40401 | Task Not Found | Verify task ID |
+| 40402 | Invalid Path | Fix URL path |
+| 40403 | Results Expired (>30 days) | Task too old to retrieve |
+
+#### Request Validation Errors (40500-40599)
+
+| Code | Message | Action |
+|------|---------|--------|
+| 40501 | Invalid Field | Check POST field names |
+| 40502 | POST Data Is Empty | Add request body |
+| 40503 | POST Data is Invalid | Fix JSON structure |
+| 40506 | Unknown Fields in POST Data | Remove invalid fields |
+
+#### **Task Processing Status (40600-40699) - IMPORTANT!**
+
+| Code | Message | Description | Action |
+|------|---------|-------------|--------|
+| **40601** | **Task Handed** | Received but not enqueued yet | **KEEP POLLING** ⏳ |
+| **40602** | **Task in Queue** | Enqueued for processing | **KEEP POLLING** ⏳ |
+
+**CRITICAL:** Status codes 40601 and 40602 are NOT errors! They indicate the task is still being processed. Your code should:
+```python
+if status_code in [40601, 40602]:
+    return None  # Keep task in pending queue, continue polling
+```
+
+### Server Error Codes (50000-50999)
+
+| Code | Message | Action |
+|------|---------|--------|
+| 50000 | Internal Error | Contact support |
+| 50001 | Error While Checking Balance | Contact support |
+| 50100 | Not Implemented | Check POST parameters |
+| 50301 | 3rd Party API Service Unavailable | Retry later |
+| 50303 | Update in progress | Wait a few minutes |
+| 50401 | Internal Error – Timeout (120s limit) | Retry task |
+| 50402 | Target page timeout (50s limit) | Try different page |
+
+## Implementation Guidelines
+
+### 1. Success Check
+```python
+if status_code == 20000:
+    # Task completed successfully, process results
+    return process_results(task)
+elif status_code == 20100:
+    # Task created successfully, store task ID
+    task_id = task.get("id")
+```
+
+### 2. Task Processing (Polling)
+```python
+if status_code in [40601, 40602]:
+    # Task still processing - NOT an error!
+    return None  # Keep in pending queue, poll again
+```
+
+### 3. Retriable Errors
+```python
+RETRIABLE_ERRORS = [40101, 50301, 50401, 50402]
+if status_code in RETRIABLE_ERRORS:
+    # Implement exponential backoff retry
+    retry_with_backoff(task)
+```
+
+### 4. Rate Limiting
+```python
+if status_code == 40202:
+    # Rate limit: 2000 requests/minute
+    time.sleep(60 / 2000)  # Space out requests
+```
+
+### 5. User Action Required
+```python
+USER_ACTION_REQUIRED = [40200, 40203, 40210]  # Payment issues
+if status_code in USER_ACTION_REQUIRED:
+    # Show user-friendly error with dashboard link
+    st.error(f"⚠️ {status_message}. Visit: https://app.dataforseo.com")
+```
+
+## Common Patterns
+
+### Standard Mode (Task POST → Poll → Task GET)
+
+1. **POST Task** → Expect `20100` (Task Created)
+2. **Poll for Ready** → Use `/tasks_ready` endpoint
+3. **GET Result** → May return:
+   - `40601`/`40602` → Keep polling ⏳
+   - `20000` → Success, process results ✅
+   - Other → Handle error ❌
+
+### Live Mode
+
+1. **POST Live Request** → Immediate response
+2. **Check Status** → Should be `20000`
+3. **Status `40102`** → Domain not found in results (not an error, just no match)
+
+## Testing Checklist
+
+- [ ] Handle 40601/40602 as "still processing" (not errors)
+- [ ] Implement rate limiting (2000 req/min)
+- [ ] Retry on 40101, 50301, 50401
+- [ ] Show user-friendly messages for payment issues
+- [ ] Test with expired tasks (40403)
+- [ ] Test with invalid credentials (40100)
+- [ ] Test with no results (40102)
+
+## References
+
+- [Official Status Codes Documentation](https://docs.dataforseo.com/v3/appendix-errors/)
+- [SERP API Task POST](https://docs.dataforseo.com/v3/serp-google-type-task_post/)
+- [SERP API Task GET](https://docs.dataforseo.com/v3/serp-se-type-task-get-advanced/)
+- [Tasks Ready Endpoint](https://docs.dataforseo.com/v3/serp-google-organic-overview/)

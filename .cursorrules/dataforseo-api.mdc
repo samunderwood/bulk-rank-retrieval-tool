@@ -1,0 +1,177 @@
+---
+description: DataForSEO API implementation guidelines and documentation requirements
+globs: **/dataforseo_client.py,**/rank_retrieval.py,**/app.py,**/ui_components.py
+---
+
+# DataForSEO API Implementation Rules
+
+## 🚨 CRITICAL: Always Verify Against Official Documentation
+
+**NEVER guess or assume API structure, response format, or field locations.**
+
+Before implementing ANY DataForSEO API functionality:
+
+1. **ASK the user to search for the official documentation**
+2. **WAIT for the user to provide the documentation link**
+3. **READ the documentation carefully**
+4. **VERIFY response structure, status codes, and field names**
+5. **ONLY THEN implement the code**
+
+## 📚 Required Documentation References
+
+### Core API Documentation
+- **Base Docs**: https://docs.dataforseo.com/
+- **Authentication**: https://docs.dataforseo.com/v3/authentication/
+- **Error Codes**: https://docs.dataforseo.com/v3/appendix-errors/
+
+### SERP API - Must Check Before Implementing
+- **Overview**: https://docs.dataforseo.com/v3/serp/overview/
+- **Locations**: https://docs.dataforseo.com/v3/serp/google/locations/
+- **Languages**: https://docs.dataforseo.com/v3/serp/google/languages/
+
+### Organic Search Endpoints - VERIFY EACH
+- **Task POST**: https://docs.dataforseo.com/v3/serp/google/organic/task_post/
+  - Response: `tasks[].id` (string, directly in task object)
+  - Response: `tasks[].result` is **NULL** for task_post
+  - Status Code: **20100** = task created successfully
+
+- **Tasks Ready**: https://docs.dataforseo.com/v3/serp/google/organic/tasks_ready/
+  - Response: `tasks[].result[].id` (list of ready task IDs)
+  - Use to check which tasks are ready before fetching
+
+- **Task GET Advanced**: https://docs.dataforseo.com/v3/serp/google/organic/task_get/advanced/
+  - Response: `tasks[].result[].keyword` (the search keyword)
+  - Response: `tasks[].result[].items[]` (array of SERP items)
+  - Status Code: **20000** = task completed successfully
+  - Items have `type`: "organic", "paid", "featured_snippet", etc.
+
+- **Live Advanced**: https://docs.dataforseo.com/v3/serp/google/organic/live/advanced/
+  - Response: Same structure as Task GET Advanced
+  - Status Code: **20000** = success
+  - Returns results immediately (no task_id)
+
+## ✅ Verified Response Structures
+
+### Task POST Response
+```json
+{
+  "tasks": [{
+    "id": "12345-67890-abcde",        // ← Extract from here
+    "status_code": 20100,              // ← Check this (20100 = created)
+    "status_message": "Ok.",
+    "result": null                     // ← Always null for task_post!
+  }]
+}
+```
+
+### Task GET Advanced Response
+```json
+{
+  "tasks": [{
+    "status_code": 20000,              // ← Check this (20000 = success)
+    "result": [{
+      "keyword": "search term",        // ← Search keyword
+      "se_domain": "google.com",
+      "location_name": "United Kingdom",
+      "items": [                       // ← SERP results array
+        {
+          "type": "organic",           // ← Filter by this
+          "rank_group": 1,             // ← Organic position
+          "rank_absolute": 1,          // ← Absolute position
+          "url": "...",
+          "title": "..."
+        }
+      ]
+    }]
+  }]
+}
+```
+
+### Tasks Ready Response
+```json
+{
+  "tasks": [{
+    "result": [
+      {"id": "task-id-1"},             // ← Ready task IDs
+      {"id": "task-id-2"}
+    ]
+  }]
+}
+```
+
+## 🔢 Status Codes - ALWAYS Check Documentation
+
+- **20000**: Task is completed successfully
+- **20100**: Task has been successfully created
+- **20200**: Task is being processed
+- **40101**: Authentication failed
+- **40102**: Incorrect or missing parameters
+- **50000**: Internal server error (implement retry logic)
+
+**Source**: https://docs.dataforseo.com/v3/appendix-errors/
+
+## 🛡️ Implementation Checklist
+
+Before writing code that interacts with DataForSEO API:
+
+- [ ] Ask user to provide documentation link for the specific endpoint
+- [ ] Read the documentation page completely
+- [ ] Verify response structure (especially nested objects/arrays)
+- [ ] Confirm status codes for success/error cases
+- [ ] Check if field is in `task` or `result` or `result[0]`
+- [ ] Verify parameter names and types
+- [ ] Check for optional vs required fields
+- [ ] Implement proper error handling for all status codes
+- [ ] Add code comments referencing the documentation URL
+
+## 📝 Code Comment Requirements
+
+Every DataForSEO API call must include a comment with:
+```python
+# According to DataForSEO docs: [URL]
+# Response structure: tasks[].field_name
+# Status code: 20xxx = success condition
+```
+
+## ❌ NEVER Do This
+
+- ❌ Assume API response structure without checking docs
+- ❌ Guess where fields are located (task vs result vs result[0])
+- ❌ Implement without verifying status codes
+- ❌ Use trial-and-error to find the right field path
+- ❌ Copy structure from similar endpoints (they may differ!)
+
+## ✅ Always Do This
+
+- ✅ Request documentation from user before implementing
+- ✅ Verify exact field paths from official docs
+- ✅ Add documentation URL in code comments
+- ✅ Test against documented response structure
+- ✅ Handle all documented status codes
+- ✅ Use exact field names from documentation
+
+## 🔗 Quick Reference Links
+
+When user mentions these features, ask them to provide these specific doc pages:
+
+| Feature | Documentation URL |
+|---------|------------------|
+| Task POST | https://docs.dataforseo.com/v3/serp/google/organic/task_post/ |
+| Task GET | https://docs.dataforseo.com/v3/serp/google/organic/task_get/advanced/ |
+| Tasks Ready | https://docs.dataforseo.com/v3/serp/google/organic/tasks_ready/ |
+| Live Mode | https://docs.dataforseo.com/v3/serp/google/organic/live/advanced/ |
+| Error Codes | https://docs.dataforseo.com/v3/appendix-errors/ |
+| Locations | https://docs.dataforseo.com/v3/serp/google/locations/ |
+| Languages | https://docs.dataforseo.com/v3/serp/google/languages/ |
+
+## 🚀 Future API Additions
+
+When implementing NEW DataForSEO features (Keywords Data, Backlinks, OnPage, etc.):
+
+1. Ask user: "Please search for and provide the DataForSEO documentation for [feature name]"
+2. Wait for documentation URL
+3. Read and verify response structure
+4. Implement based on verified documentation
+5. Add documentation URL in code comments
+
+**Remember**: Different DataForSEO APIs may have different response structures. ALWAYS verify!
