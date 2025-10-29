@@ -172,10 +172,18 @@ def live_mode_rank_check(
         }]
         
         try:
+            # Thread-safe debug logging - show what we're sending
+            debug_logs.append(f"\n🔍 **Live Mode - '{keyword}':**")
+            debug_logs.append(f"   - Payload sent:")
+            debug_logs.append(f"      keyword: {payload[0]['keyword']}")
+            debug_logs.append(f"      target: {payload[0]['target']}")
+            debug_logs.append(f"      location_code: {payload[0]['location_code']}")
+            debug_logs.append(f"      language_code: {payload[0]['language_code']}")
+            debug_logs.append(f"      device: {payload[0]['device']}")
+            debug_logs.append(f"      depth: {payload[0]['depth']}")
+            
             response = client.post_live(payload)
             
-            # Thread-safe debug logging
-            debug_logs.append(f"\n🔍 **Live Mode - '{keyword}':**")
             debug_logs.append(f"   - Response status: {response.get('status_code')} - {response.get('status_message')}")
             debug_logs.append(f"   - Tasks count: {len(response.get('tasks', []))}")
             
@@ -184,7 +192,10 @@ def live_mode_rank_check(
             debug_logs.append(f"   - Task result_count: {task.get('result_count')}")
             
             if task.get("status_code") != 20000:
-                debug_logs.append(f"   ❌ Task failed with status {task.get('status_code')}")
+                if task.get("status_code") == 40102:
+                    debug_logs.append(f"   ❌ 40102 = Domain '{payload[0]['target']}' not found in top {payload[0]['depth']} results for this keyword")
+                else:
+                    debug_logs.append(f"   ❌ Task failed with status {task.get('status_code')}")
                 return {
                     "keyword": keyword,
                     "found": False,
@@ -267,6 +278,24 @@ def live_mode_rank_check(
         with st.expander("🐛 Debug Logs (Click to expand)", expanded=True):
             for log in debug_logs:
                 st.text(log)
+        
+        # Check if all results are 40102 errors
+        error_40102_count = sum(1 for log in debug_logs if "40102" in str(log))
+        if error_40102_count > 0:
+            st.info(f"""
+                **ℹ️ About Status Code 40102 - No Search Results:**
+                
+                This means your target domain was **not found in the top results** for these keywords.
+                
+                **This could mean:**
+                - Your domain doesn't rank in the top {depth} positions for these keywords
+                - Try increasing the "Search Depth" parameter (e.g., 100 or 200)
+                - Try **Standard Mode** instead - it gets all results and filters client-side
+                
+                **Note:** Live mode with `target` parameter only returns results if your domain 
+                is found. Standard mode gets ALL results regardless, which is better for checking 
+                if you rank outside the top positions.
+            """)
     
     return rows
 
