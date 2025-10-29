@@ -160,12 +160,20 @@ def live_mode_rank_check(
         if stop_event and stop_event.is_set():
             return {"keyword": keyword, "found": False, "note": "Stopped"}
         
+        # Format target parameter according to DataForSEO docs:
+        # - "example.com" = exact home page match only
+        # - "example.com*" = domain and all its pages
+        # - "*example.com*" = domain, all pages, and all subdomains
+        if include_subdomains:
+            target_param = f"*{domain}*"  # Match domain, pages, and subdomains
+        else:
+            target_param = f"{domain}*"   # Match domain and all its pages
+        
         payload = [{
             "keyword": keyword,
             "language_code": language_code,
             "location_code": int(location_code),
-            "target": domain,
-            "include_subdomains": bool(include_subdomains),
+            "target": target_param,
             "device": device,
             "depth": int(depth),
             "os": os_name or ("windows" if device == "desktop" else "android"),
@@ -176,7 +184,7 @@ def live_mode_rank_check(
             debug_logs.append(f"\n🔍 **Live Mode - '{keyword}':**")
             debug_logs.append(f"   - Payload sent:")
             debug_logs.append(f"      keyword: {payload[0]['keyword']}")
-            debug_logs.append(f"      target: {payload[0]['target']}")
+            debug_logs.append(f"      target: {payload[0]['target']} (formatted from '{domain}')")
             debug_logs.append(f"      location_code: {payload[0]['location_code']}")
             debug_logs.append(f"      language_code: {payload[0]['language_code']}")
             debug_logs.append(f"      device: {payload[0]['device']}")
@@ -193,13 +201,14 @@ def live_mode_rank_check(
             
             if task.get("status_code") != 20000:
                 if task.get("status_code") == 40102:
-                    debug_logs.append(f"   ❌ 40102 = Domain '{payload[0]['target']}' not found in top {payload[0]['depth']} results for this keyword")
+                    debug_logs.append(f"   ❌ 40102 = Target '{payload[0]['target']}' not found in top {payload[0]['depth']} results")
+                    debug_logs.append(f"   💡 Note: We added wildcard to match all pages ('{domain}' → '{payload[0]['target']}')")
                 else:
                     debug_logs.append(f"   ❌ Task failed with status {task.get('status_code')}")
                 return {
                     "keyword": keyword,
                     "found": False,
-                    "note": f"API error: {task.get('status_message')}"
+                    "note": f"Not found in top {payload[0]['depth']}"
                 }
             
             result_list = task.get("result", [])
