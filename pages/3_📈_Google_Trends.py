@@ -81,7 +81,7 @@ mode = st.radio(
     "Mode",
     options=["Live", "Standard"],
     horizontal=True,
-    help="Live: Immediate results (slower, max 250/min). Standard: Queued processing (faster for bulk, max 2000/min). Each keyword processed individually."
+    help="Live: Results in ~5-10 seconds per keyword (250/min limit). Standard: Post tasks then retrieve results, better for bulk (2000/min limit)."
 )
 
 col1, col2 = st.columns([2, 1])
