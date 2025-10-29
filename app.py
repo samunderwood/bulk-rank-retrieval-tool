@@ -463,13 +463,11 @@ if mode.startswith("Live"):
     parallel = 10  # Parallel workers
     rpm = 600  # Requests per minute (conservative to avoid rate limits)
     launch_delay = 0.0  # No delay needed with proper rate limiting
-    st.info(f"ℹ️ **Live Mode:** {parallel} parallel workers, max {rpm} requests/minute")
 else:
     tasks_per = 100  # Tasks per POST request (can go up to 1000 per DataForSEO docs)
     max_inflight = 1000  # Maximum in-flight tasks
     poll_iv = 2.0  # Poll interval in seconds (check less frequently to reduce API calls)
     fetch_parallel = 12  # Parallel fetch workers
-    st.info(f"ℹ️ **Standard Mode:** {tasks_per} tasks/batch, {max_inflight} max in-flight")
 
 # Keywords input
 st.subheader("Keywords")
