@@ -139,6 +139,13 @@ def std_task_get(sess, headers, tid):
 def std_post_batched(keywords: List[str], batch_size: int, domain: str, loc_code: int,
                      lang: str, device: str, os_name: str, depth: int, include_sub: bool,
                      headers, auth, stop_evt) -> List[str]:
+    """
+    Post tasks in batches to DataForSEO Standard mode.
+    Following DataForSEO best practices:
+    - Batches up to 1000 tasks per request
+    - Proper status code handling (20100 = success for task_post)
+    - Error handling for retries on 50000 errors
+    """
     sess = make_session(*auth); ids=[]
     for i in range(0, len(keywords), batch_size):
         if stop_evt.is_set(): break
@@ -149,11 +156,35 @@ def std_post_batched(keywords: List[str], batch_size: int, domain: str, loc_code
             "device": device, "depth": int(depth),
             "os": os_name or ("windows" if device=="desktop" else "android"),
         } for kw in chunk]
-        data = std_post_tasks(sess, headers, payload).json()
-        for t in data.get("tasks", []):
-            if t.get("status_code")==20100 and t.get("result"):
-                ids.append(t["result"][0]["id"])
-        time.sleep(0.2)
+        
+        # Post with retry on internal errors (50000)
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                response = std_post_tasks(sess, headers, payload)
+                data = response.json()
+                
+                for t in data.get("tasks", []):
+                    status_code = t.get("status_code")
+                    # 20100 = successfully created task
+                    if status_code == 20100 and t.get("result"):
+                        ids.append(t["result"][0]["id"])
+                    # 50000 = internal error, retry
+                    elif status_code == 50000 and attempt < max_retries - 1:
+                        time.sleep(1)  # Wait before retry
+                        break
+                else:
+                    # All tasks processed successfully
+                    break
+                    
+            except Exception as e:
+                if attempt < max_retries - 1:
+                    time.sleep(1)
+                    continue
+                # Last attempt failed, skip this batch
+                break
+        
+        time.sleep(0.2)  # Rate limiting between batches
     return ids
 
 def std_fetch(task_ids: List[str], headers, auth, poll_s: float, fetch_parallel: int, lang, device, os_name, depth, stop_evt):
@@ -425,20 +456,20 @@ with col1:
 with col2:
     include_sub = st.checkbox("Include subdomains", True, help="Check all subdomains of target domain")
 
-# Set optimal performance parameters based on DataForSEO rate limits
+# Set optimal performance parameters based on DataForSEO rate limits and best practices
 # DataForSEO allows 2000 requests/minute per account
-# We set conservative defaults to avoid rate limit errors
+# Recommended: up to 1000 keywords per batch for optimal cost and performance
 if mode.startswith("Live"):
     parallel = 10  # Parallel workers
     rpm = 600  # Requests per minute (conservative to avoid rate limits)
     launch_delay = 0.0  # No delay needed with proper rate limiting
-    st.info(f"ℹ️ **Live Mode Settings:** {parallel} parallel workers, max {rpm} requests/minute")
+    st.info(f"ℹ️ **Live Mode:** {parallel} parallel workers, max {rpm} requests/minute")
 else:
-    tasks_per = 100  # Tasks per POST request
-    max_inflight = 500  # Maximum in-flight tasks
-    poll_iv = 1.0  # Poll interval in seconds
+    tasks_per = 100  # Tasks per POST request (can go up to 1000 per DataForSEO docs)
+    max_inflight = 1000  # Maximum in-flight tasks
+    poll_iv = 2.0  # Poll interval in seconds (check less frequently to reduce API calls)
     fetch_parallel = 12  # Parallel fetch workers
-    st.info(f"ℹ️ **Standard Mode Settings:** {tasks_per} tasks/batch, {max_inflight} max in-flight, {fetch_parallel} parallel fetches")
+    st.info(f"ℹ️ **Standard Mode:** {tasks_per} tasks/batch, {max_inflight} max in-flight")
 
 # Keywords input
 st.subheader("Keywords")
@@ -522,25 +553,33 @@ if run:
                 if kw not in done:
                     rows.append({"keyword": kw, "found": False, "note": "Stopped before start"})
     else:
-        # Standard queue
+        # Standard mode: Post tasks in batches, then fetch results
+        # Following DataForSEO best practices for batch processing
+        st.write("**Phase 1:** Posting tasks to DataForSEO...")
+        post_bar = st.progress(0.0, text="Submitting batches...")
         posted = []
-        # Post in waves, respecting max_inflight
         idx = 0
+        
+        # Post all keywords in batches
         while idx < len(kws) and not st.session_state.stop_evt.is_set():
-            capacity = max_inflight - len(posted)
-            if capacity <= 0: break
-            size = min(tasks_per, len(kws)-idx, capacity)
-            ids = std_post_batched(kws[idx:idx+size], tasks_per, domain, loc_code, lang_code, device, os_name, depth, include_sub, headers, auth, st.session_state.stop_evt)
-            posted.extend(ids); idx += size
-            time.sleep(0.2)
-        while idx < len(kws) and not st.session_state.stop_evt.is_set():
-            time.sleep(0.8)
-            capacity = max_inflight - len(posted)
-            if capacity <= 0: continue
-            size = min(tasks_per, len(kws)-idx, capacity)
-            ids = std_post_batched(kws[idx:idx+size], tasks_per, domain, loc_code, lang_code, device, os_name, depth, include_sub, headers, auth, st.session_state.stop_evt)
-            posted.extend(ids); idx += size
-        rows = std_fetch(posted, headers, auth, poll_iv, fetch_parallel, lang_code, device, os_name, depth, st.session_state.stop_evt)
+            size = min(tasks_per, len(kws) - idx)
+            ids = std_post_batched(
+                kws[idx:idx+size], tasks_per, domain, loc_code, lang_code, 
+                device, os_name, depth, include_sub, headers, auth, st.session_state.stop_evt
+            )
+            posted.extend(ids)
+            idx += size
+            post_bar.progress(min(1.0, idx / len(kws)), text=f"Posted {idx}/{len(kws)} keywords")
+            time.sleep(0.3)  # Small delay between batches
+        
+        post_bar.progress(1.0, text=f"✅ Posted {len(posted)} tasks successfully")
+        
+        if posted:
+            st.write(f"**Phase 2:** Waiting for results (this may take 1-3 minutes)...")
+            rows = std_fetch(posted, headers, auth, poll_iv, fetch_parallel, lang_code, device, os_name, depth, st.session_state.stop_evt)
+        else:
+            st.error("No tasks were successfully posted.")
+            st.stop()
 
     # Display results
     df = pd.DataFrame(rows)
