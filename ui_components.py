@@ -5,7 +5,6 @@ import streamlit as st
 import pandas as pd
 from typing import Optional, Tuple
 from dataforseo_client import DataForSEOClient
-from storage import Storage
 
 
 def setup_page_config(title: str = "DataForSEO Tool", layout: str = "wide"):
@@ -23,20 +22,9 @@ def render_credentials_sidebar(client_class=DataForSEOClient) -> Optional[Tuple]
     Returns:
         Tuple of (client instance, headers dict, auth tuple) or None
     """
-    storage = Storage()
-    
-    # Initialize session state - load from storage if available
+    # Initialize session state
     if "user_login" not in st.session_state:
-        saved_prefs = storage.load_preferences()
-        if saved_prefs and saved_prefs.get("remember_creds"):
-            st.session_state.user_login = saved_prefs.get("user_login", "")
-            st.session_state.user_password = saved_prefs.get("user_password", "")
-            st.session_state.remember_creds = True
-        else:
-            st.session_state.user_login = ""
-            st.session_state.user_password = ""
-            st.session_state.remember_creds = False
-    
+        st.session_state.user_login = ""
     if "user_password" not in st.session_state:
         st.session_state.user_password = ""
     if "remember_creds" not in st.session_state:
@@ -85,30 +73,15 @@ def render_credentials_sidebar(client_class=DataForSEOClient) -> Optional[Tuple]
     remember = st.sidebar.checkbox(
         "Remember credentials",
         value=st.session_state.remember_creds,
-        help="Persist credentials across page refreshes (saved locally)"
+        help="Keep credentials for this browser session"
     )
     
     if remember and user_login and user_password:
         st.session_state.user_login = user_login
         st.session_state.user_password = user_password
         st.session_state.remember_creds = True
-        
-        # Save to persistent storage
-        try:
-            storage.save_preferences({
-                "remember_creds": True,
-                "user_login": user_login,
-                "user_password": user_password
-            })
-        except Exception as e:
-            st.sidebar.warning(f"⚠️ Could not save credentials: {e}")
     elif not remember:
         st.session_state.remember_creds = False
-        # Clear from storage
-        try:
-            storage.clear_preferences()
-        except:
-            pass
     
     # Clear credentials button
     if st.session_state.user_login or st.session_state.user_password:
@@ -117,11 +90,6 @@ def render_credentials_sidebar(client_class=DataForSEOClient) -> Optional[Tuple]
             st.session_state.user_password = ""
             st.session_state.remember_creds = False
             st.session_state.credentials_verified = False
-            # Clear from persistent storage
-            try:
-                storage.clear_preferences()
-            except:
-                pass
             st.rerun()
     
     if user_login and user_password:
@@ -146,9 +114,9 @@ def verify_credentials(client: DataForSEOClient) -> bool:
     Returns:
         True if credentials are valid, False otherwise
     """
-    # Show tip only if credentials are NOT remembered
-    if not st.session_state.get("credentials_verified", False) and not st.session_state.get("remember_creds", False):
-        st.info("👈 **Tip:** Check 'Remember credentials' in the sidebar to persist them across page refreshes.")
+    # Show tip only on first verification
+    if not st.session_state.get("credentials_verified", False):
+        st.info("👈 **Tip:** Check 'Remember credentials' in the sidebar to keep them for your browser session.")
     
     try:
         with st.spinner("Verifying credentials..."):
@@ -181,50 +149,20 @@ def render_location_selector(client: DataForSEOClient, serp_type: str = "google"
     Returns:
         Tuple of (location_code: int, country_iso: str)
     """
-    storage = Storage()
-    cache_key = f"countries_df_{serp_type}"
-    cache_file = storage.base_dir / f"cache_{serp_type}_countries.json"
+    # Load countries
+    if "countries_df" not in st.session_state:
+        with st.spinner("Loading countries..."):
+            countries = client.get_locations(serp_type=serp_type)
+            df = pd.DataFrame(countries)
+            if not df.empty:
+                countries_df = df[df["location_type"] == "Country"].copy()
+                countries_df = countries_df[["location_name", "location_code", "country_iso_code"]].drop_duplicates()
+                countries_df = countries_df.sort_values("location_name").reset_index(drop=True)
+                st.session_state.countries_df = countries_df
+            else:
+                st.session_state.countries_df = pd.DataFrame()
     
-    # Try to load from persistent cache first
-    if cache_key not in st.session_state:
-        countries_df = None
-        
-        # Try loading from disk cache (valid for 7 days)
-        if cache_file.exists():
-            import time
-            file_age_days = (time.time() - cache_file.stat().st_mtime) / 86400
-            if file_age_days < 7:
-                try:
-                    import json
-                    with open(cache_file, 'r') as f:
-                        cached_data = json.load(f)
-                    countries_df = pd.DataFrame(cached_data)
-                except:
-                    pass
-        
-        # If not in cache or cache expired, fetch from API
-        if countries_df is None or countries_df.empty:
-            with st.spinner("Loading countries from DataForSEO..."):
-                countries = client.get_locations(serp_type=serp_type)
-                df = pd.DataFrame(countries)
-                if not df.empty:
-                    countries_df = df[df["location_type"] == "Country"].copy()
-                    countries_df = countries_df[["location_name", "location_code", "country_iso_code"]].drop_duplicates()
-                    countries_df = countries_df.sort_values("location_name").reset_index(drop=True)
-                    
-                    # Save to persistent cache
-                    try:
-                        import json
-                        with open(cache_file, 'w') as f:
-                            json.dump(countries_df.to_dict('records'), f)
-                    except:
-                        pass
-                else:
-                    countries_df = pd.DataFrame()
-        
-        st.session_state[cache_key] = countries_df
-    
-    countries_df = st.session_state[cache_key]
+    countries_df = st.session_state.countries_df
     
     if countries_df.empty:
         st.error("Unable to load countries from DataForSEO API")
@@ -302,49 +240,19 @@ def render_language_selector(client: DataForSEOClient, serp_type: str = "google"
     Returns:
         Selected language code
     """
-    storage = Storage()
-    cache_key = f"lang_df_{serp_type}"
-    cache_file = storage.base_dir / f"cache_{serp_type}_languages.json"
+    # Load languages
+    if "lang_df" not in st.session_state:
+        with st.spinner("Loading languages..."):
+            languages = client.get_languages(serp_type=serp_type)
+            lang_df = pd.DataFrame(languages)
+            if not lang_df.empty:
+                lang_df = lang_df[["language_name", "language_code"]].drop_duplicates()
+                lang_df = lang_df.sort_values("language_name").reset_index(drop=True)
+                st.session_state.lang_df = lang_df
+            else:
+                st.session_state.lang_df = pd.DataFrame()
     
-    # Try to load from persistent cache first
-    if cache_key not in st.session_state:
-        lang_df = None
-        
-        # Try loading from disk cache (valid for 7 days)
-        if cache_file.exists():
-            import time
-            file_age_days = (time.time() - cache_file.stat().st_mtime) / 86400
-            if file_age_days < 7:
-                try:
-                    import json
-                    with open(cache_file, 'r') as f:
-                        cached_data = json.load(f)
-                    lang_df = pd.DataFrame(cached_data)
-                except:
-                    pass
-        
-        # If not in cache or cache expired, fetch from API
-        if lang_df is None or lang_df.empty:
-            with st.spinner("Loading languages from DataForSEO..."):
-                languages = client.get_languages(serp_type=serp_type)
-                lang_df = pd.DataFrame(languages)
-                if not lang_df.empty:
-                    lang_df = lang_df[["language_name", "language_code"]].drop_duplicates()
-                    lang_df = lang_df.sort_values("language_name").reset_index(drop=True)
-                    
-                    # Save to persistent cache
-                    try:
-                        import json
-                        with open(cache_file, 'w') as f:
-                            json.dump(lang_df.to_dict('records'), f)
-                    except:
-                        pass
-                else:
-                    lang_df = pd.DataFrame()
-        
-        st.session_state[cache_key] = lang_df
-    
-    lang_df = st.session_state[cache_key]
+    lang_df = st.session_state.lang_df
     
     if not lang_df.empty:
         lang_options = [f"{row.language_name} [{row.language_code}]" for row in lang_df.itertuples()]

@@ -23,13 +23,9 @@ from rank_retrieval import (
     live_mode_rank_check,
     standard_mode_rank_check
 )
-from storage import Storage
 
 # Configure page
 setup_page_config(title="DataForSEO Rank Tool", layout="wide")
-
-# Initialize persistent storage
-storage = Storage()
 
 # -------- UI --------
 st.title("DataForSEO Rank Retrieval")
@@ -43,9 +39,9 @@ if client:
 else:
     st.stop()
 
-# Initialize results history in session state (load from storage)
+# Initialize results history in session state
 if "results_history" not in st.session_state:
-    st.session_state.results_history = storage.load_results(limit=50)
+    st.session_state.results_history = []
 if "loaded_result" not in st.session_state:
     st.session_state.loaded_result = None
 
@@ -359,21 +355,14 @@ if run:
         found_count = df["found"].sum() if "found" in df.columns else 0
         total_count = len(df)
         
-        # Add to history and save to disk
-        result = {
+        # Add to history
+        st.session_state.results_history.append({
             "timestamp": datetime.now(),
             "domain": domain,
             "total": total_count,
             "found": found_count,
             "df": df.copy()
-        }
-        st.session_state.results_history.append(result)
-        
-        # Save to persistent storage
-        try:
-            storage.save_result(result)
-        except Exception as e:
-            st.warning(f"⚠️ Could not save result to disk: {e}")
+        })
         
         # Show completion status
         status_container = st.empty()

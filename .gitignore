@@ -29,16 +29,14 @@ env/
 # IDEs
 .vscode/
 .idea/
-.devcontainer/
 *.swp
 *.swo
 *~
 .DS_Store
-.cursorrules/
-.cursor/
 
 # Streamlit
 .streamlit/
+*.toml
 
 # Environment variables
 .env
@@ -52,13 +50,15 @@ env/
 *.xlsx
 *.xls
 
-# Local storage
-data/
-*.db
-*.sqlite
-
 # Testing
 .pytest_cache/
 .coverage
 htmlcov/
+
+# Cursor AI
+.cursorrules/
+.cursor/
+
+# Dev containers (optional - uncomment if not using)
+# .devcontainer/
 
