@@ -3,8 +3,12 @@ DataForSEO Rank Retrieval Tool
 Main Streamlit application using modular architecture
 """
 import threading
+from datetime import datetime
+from io import BytesIO
 import streamlit as st
 import pandas as pd
+import plotly.express as px
+import plotly.graph_objects as go
 
 from dataforseo_client import SERPClient
 from ui_components import (
@@ -34,6 +38,22 @@ if client:
     verify_credentials(client)
 else:
     st.stop()
+
+# Initialize results history in session state
+if "results_history" not in st.session_state:
+    st.session_state.results_history = []
+
+# Show results history in sidebar
+if st.session_state.results_history:
+    with st.sidebar.expander(f"📜 Results History ({len(st.session_state.results_history)})"):
+        for i, run in enumerate(reversed(st.session_state.results_history[-5:])):  # Show last 5
+            with st.container():
+                st.caption(f"**Run {len(st.session_state.results_history) - i}**")
+                st.text(f"🎯 {run['domain']}")
+                st.text(f"📊 {run['total']} keywords")
+                st.text(f"✅ {run['found']} found")
+                st.text(f"🕐 {run['timestamp'].strftime('%H:%M:%S')}")
+                st.divider()
 
 # Mode selection
 mode = st.radio("Mode", ["Live (immediate)", "Standard (batched)"], horizontal=True)
@@ -186,8 +206,157 @@ if run:
         ]
         df = df.reindex(columns=cols)
         
-        # Render results
-        render_results_table(df, domain=domain)
+        # Calculate metrics
+        found_count = df["found"].sum() if "found" in df.columns else 0
+        total_count = len(df)
+        
+        # Add to history
+        st.session_state.results_history.append({
+            "timestamp": datetime.now(),
+            "domain": domain,
+            "total": total_count,
+            "found": found_count,
+            "df": df.copy()
+        })
+        
+        # Show completion status
+        status_container = st.empty()
+        with status_container:
+            st.success(f"✅ **Complete!** Found {found_count}/{total_count} keywords ranking")
+        
+        # Display results in tabs
+        st.divider()
+        st.subheader("📊 Results")
+        
+        tab1, tab2, tab3 = st.tabs(["📋 Table View", "📈 Charts & Analytics", "💾 Export"])
+        
+        with tab1:
+            # Summary metrics
+            col1, col2, col3, col4 = st.columns(4)
+            col1.metric("Total Keywords", total_count)
+            col2.metric("Found", found_count)
+            col3.metric("Not Found", total_count - found_count)
+            if found_count > 0:
+                avg_rank = df[df["found"] == True]["organic_rank"].mean()
+                col4.metric("Avg Rank", f"{avg_rank:.1f}" if pd.notna(avg_rank) else "N/A")
+            
+            # Table
+            st.dataframe(df, width="stretch", height=400)
+            
+            # Quick preview of top rankings
+            if found_count > 0:
+                with st.expander("🎯 Top 10 Rankings Preview"):
+                    top_df = df[df["found"] == True].sort_values("organic_rank").head(10)
+                    preview_cols = ["keyword", "organic_rank", "absolute_rank", "url", "title"]
+                    st.dataframe(top_df[preview_cols], width="stretch")
+        
+        with tab2:
+            if found_count > 0:
+                # Rank distribution chart
+                st.markdown("### 📊 Rank Distribution")
+                rank_counts = df[df["found"] == True]["organic_rank"].value_counts().sort_index()
+                fig_dist = px.bar(
+                    x=rank_counts.index,
+                    y=rank_counts.values,
+                    labels={"x": "Rank Position", "y": "Number of Keywords"},
+                    title="Keywords by Rank Position"
+                )
+                fig_dist.update_traces(marker_color='#1f77b4')
+                st.plotly_chart(fig_dist, use_container_width=True)
+                
+                # Rank range breakdown
+                st.markdown("### 📈 Rank Range Breakdown")
+                rank_ranges = {
+                    "Top 3 (1-3)": len(df[(df["found"] == True) & (df["organic_rank"] <= 3)]),
+                    "Top 10 (4-10)": len(df[(df["found"] == True) & (df["organic_rank"] > 3) & (df["organic_rank"] <= 10)]),
+                    "Top 20 (11-20)": len(df[(df["found"] == True) & (df["organic_rank"] > 10) & (df["organic_rank"] <= 20)]),
+                    "Top 50 (21-50)": len(df[(df["found"] == True) & (df["organic_rank"] > 20) & (df["organic_rank"] <= 50)]),
+                    "Beyond 50": len(df[(df["found"] == True) & (df["organic_rank"] > 50)])
+                }
+                
+                fig_pie = go.Figure(data=[go.Pie(
+                    labels=list(rank_ranges.keys()),
+                    values=list(rank_ranges.values()),
+                    hole=.3
+                )])
+                fig_pie.update_layout(title="Keyword Distribution by Rank Range")
+                st.plotly_chart(fig_pie, use_container_width=True)
+                
+                # Performance metrics
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.markdown("### 🏆 Performance Metrics")
+                    top_3 = rank_ranges["Top 3 (1-3)"]
+                    top_10 = rank_ranges["Top 3 (1-3)"] + rank_ranges["Top 10 (4-10)"]
+                    st.metric("Top 3 Rankings", f"{top_3} ({top_3/found_count*100:.1f}%)")
+                    st.metric("Top 10 Rankings", f"{top_10} ({top_10/found_count*100:.1f}%)")
+                
+                with col2:
+                    st.markdown("### 📉 Rank Statistics")
+                    ranks = df[df["found"] == True]["organic_rank"]
+                    st.metric("Best Rank", int(ranks.min()))
+                    st.metric("Median Rank", f"{ranks.median():.0f}")
+                    st.metric("Worst Rank", int(ranks.max()))
+            else:
+                st.info("No rankings found. Charts will appear when keywords are found.")
+        
+        with tab3:
+            st.markdown("### 💾 Download Results")
+            st.caption(f"Export {total_count} keywords in your preferred format")
+            
+            # CSV Export
+            csv = df.to_csv(index=False).encode("utf-8")
+            csv_filename = f"dataforseo_ranks_{domain}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+            
+            # Excel Export
+            excel_buffer = BytesIO()
+            with pd.ExcelWriter(excel_buffer, engine='openpyxl') as writer:
+                # Main results sheet
+                df.to_excel(writer, sheet_name='Results', index=False)
+                
+                # Summary sheet
+                if found_count > 0:
+                    summary_df = pd.DataFrame({
+                        'Metric': ['Total Keywords', 'Found', 'Not Found', 'Average Rank', 
+                                  'Top 3', 'Top 10', 'Top 20', 'Best Rank', 'Worst Rank'],
+                        'Value': [
+                            total_count,
+                            found_count,
+                            total_count - found_count,
+                            f"{df[df['found'] == True]['organic_rank'].mean():.1f}",
+                            rank_ranges["Top 3 (1-3)"],
+                            rank_ranges["Top 3 (1-3)"] + rank_ranges["Top 10 (4-10)"],
+                            rank_ranges["Top 3 (1-3)"] + rank_ranges["Top 10 (4-10)"] + rank_ranges["Top 20 (11-20)"],
+                            int(df[df['found'] == True]['organic_rank'].min()),
+                            int(df[df['found'] == True]['organic_rank'].max())
+                        ]
+                    })
+                    summary_df.to_excel(writer, sheet_name='Summary', index=False)
+            
+            excel_data = excel_buffer.getvalue()
+            excel_filename = f"dataforseo_ranks_{domain}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+            
+            # Download buttons
+            col1, col2 = st.columns(2)
+            with col1:
+                st.download_button(
+                    label="📄 Download CSV",
+                    data=csv,
+                    file_name=csv_filename,
+                    mime="text/csv",
+                    use_container_width=True
+                )
+            
+            with col2:
+                st.download_button(
+                    label="📊 Download Excel",
+                    data=excel_data,
+                    file_name=excel_filename,
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    use_container_width=True
+                )
+            
+            st.info("💡 **Tip:** Excel export includes a Summary sheet with key metrics")
         
     except Exception as e:
         st.error(f"❌ **Error during execution**: {str(e)}")
