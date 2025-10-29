@@ -27,8 +27,6 @@ def render_credentials_sidebar(client_class=DataForSEOClient) -> Optional[Tuple]
         st.session_state.user_login = ""
     if "user_password" not in st.session_state:
         st.session_state.user_password = ""
-    if "remember_creds" not in st.session_state:
-        st.session_state.remember_creds = False
     
     st.sidebar.header("🔐 DataForSEO Credentials")
     st.sidebar.info("Don't have an account? [Sign up here](https://dataforseo.com/)")
@@ -69,26 +67,16 @@ def render_credentials_sidebar(client_class=DataForSEOClient) -> Optional[Tuple]
         key="password_input"
     )
     
-    # Remember credentials
-    remember = st.sidebar.checkbox(
-        "Remember credentials",
-        value=st.session_state.remember_creds,
-        help="Keep credentials for this browser session"
-    )
-    
-    if remember and user_login and user_password:
+    # Auto-save credentials to session state
+    if user_login and user_password:
         st.session_state.user_login = user_login
         st.session_state.user_password = user_password
-        st.session_state.remember_creds = True
-    elif not remember:
-        st.session_state.remember_creds = False
     
     # Clear credentials button
     if st.session_state.user_login or st.session_state.user_password:
-        if st.sidebar.button("🗑️ Clear saved credentials"):
+        if st.sidebar.button("🗑️ Clear Credentials"):
             st.session_state.user_login = ""
             st.session_state.user_password = ""
-            st.session_state.remember_creds = False
             st.session_state.credentials_verified = False
             st.rerun()
     
@@ -116,7 +104,7 @@ def verify_credentials(client: DataForSEOClient) -> bool:
     """
     # Show tip only on first verification
     if not st.session_state.get("credentials_verified", False):
-        st.info("👈 **Tip:** Check 'Remember credentials' in the sidebar to keep them for your browser session.")
+        st.info("👈 **Tip:** Your credentials will persist across all pages during this session.")
     
     try:
         with st.spinner("Verifying credentials..."):

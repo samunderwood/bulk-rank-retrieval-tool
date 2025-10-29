@@ -27,7 +27,7 @@ if not client:
     st.info("""
         **Getting Started:**
         1. Enter your DataForSEO login and password in the sidebar
-        2. Check 'Remember credentials' to keep them for your session
+        2. Your credentials will automatically persist across all pages
         3. Start getting search volume data!
         
         Don't have credentials? Get them at [DataForSEO API Access](https://app.dataforseo.com/api-access)
