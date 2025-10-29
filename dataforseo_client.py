@@ -152,6 +152,20 @@ class SERPClient(DataForSEOClient):
         """
         Post live SERP requests (immediate results).
         
+        Documentation:
+        https://docs.dataforseo.com/v3/serp-google-organic-live-advanced/
+        
+        Response Structure:
+        {
+          "tasks": [{
+            "status_code": 20000,  // Success
+            "result": [{
+              "keyword": "...",
+              "items": [...]
+            }]
+          }]
+        }
+        
         Args:
             tasks: List of task dictionaries
         
@@ -166,6 +180,18 @@ class SERPClient(DataForSEOClient):
         """
         Post standard SERP tasks (queued, retrieve later).
         
+        Documentation:
+        https://docs.dataforseo.com/v3/serp-google-organic-task_post/
+        
+        Response Structure:
+        {
+          "tasks": [{
+            "id": "string",           // Task ID - directly in task object
+            "status_code": 20100,     // 20100 = successfully created
+            "result": null            // Result is NULL for task_post
+          }]
+        }
+        
         Args:
             tasks: List of task dictionaries
         
@@ -177,7 +203,25 @@ class SERPClient(DataForSEOClient):
         return response.json()
     
     def get_tasks_ready(self) -> Dict:
-        """Get list of completed tasks ready for retrieval."""
+        """
+        Get list of completed tasks ready for retrieval.
+        
+        Documentation:
+        https://docs.dataforseo.com/v3/serp-google-organic-tasks-ready/
+        
+        Response Structure:
+        {
+          "tasks": [{
+            "result": [{
+              "id": "string",      // Task IDs that are ready
+              "date_posted": "...",
+              "endpoint_regular": "...",
+              "endpoint_advanced": "...",
+              "endpoint_html": "..."
+            }]
+          }]
+        }
+        """
         endpoint = f"serp/{self.serp_type}/organic/tasks_ready"
         response = self._request("GET", endpoint, timeout=60)
         return response.json()
@@ -185,6 +229,32 @@ class SERPClient(DataForSEOClient):
     def get_task_result(self, task_id: str) -> Dict:
         """
         Get results for a specific task.
+        
+        Documentation:
+        https://docs.dataforseo.com/v3/serp-google-organic-task-get-advanced/
+        
+        Response Structure:
+        {
+          "tasks": [{
+            "status_code": 20000,  // 20000 = task completed successfully
+            "result": [{
+              "keyword": "...",
+              "type": "organic",
+              "se_domain": "google.com",
+              "location_code": 2826,
+              "language_code": "en",
+              "items": [        // Array of SERP items
+                {
+                  "type": "organic",
+                  "rank_group": 1,
+                  "rank_absolute": 1,
+                  "url": "...",
+                  "title": "..."
+                }
+              ]
+            }]
+          }]
+        }
         
         Args:
             task_id: Task ID from post_tasks
