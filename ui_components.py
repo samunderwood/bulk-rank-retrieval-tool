@@ -181,20 +181,50 @@ def render_location_selector(client: DataForSEOClient, serp_type: str = "google"
     Returns:
         Tuple of (location_code: int, country_iso: str)
     """
-    # Load countries
-    if "countries_df" not in st.session_state:
-        with st.spinner("Loading countries..."):
-            countries = client.get_locations(serp_type=serp_type)
-            df = pd.DataFrame(countries)
-            if not df.empty:
-                countries_df = df[df["location_type"] == "Country"].copy()
-                countries_df = countries_df[["location_name", "location_code", "country_iso_code"]].drop_duplicates()
-                countries_df = countries_df.sort_values("location_name").reset_index(drop=True)
-                st.session_state.countries_df = countries_df
-            else:
-                st.session_state.countries_df = pd.DataFrame()
+    storage = Storage()
+    cache_key = f"countries_df_{serp_type}"
+    cache_file = storage.base_dir / f"cache_{serp_type}_countries.json"
     
-    countries_df = st.session_state.countries_df
+    # Try to load from persistent cache first
+    if cache_key not in st.session_state:
+        countries_df = None
+        
+        # Try loading from disk cache (valid for 7 days)
+        if cache_file.exists():
+            import time
+            file_age_days = (time.time() - cache_file.stat().st_mtime) / 86400
+            if file_age_days < 7:
+                try:
+                    import json
+                    with open(cache_file, 'r') as f:
+                        cached_data = json.load(f)
+                    countries_df = pd.DataFrame(cached_data)
+                except:
+                    pass
+        
+        # If not in cache or cache expired, fetch from API
+        if countries_df is None or countries_df.empty:
+            with st.spinner("Loading countries from DataForSEO..."):
+                countries = client.get_locations(serp_type=serp_type)
+                df = pd.DataFrame(countries)
+                if not df.empty:
+                    countries_df = df[df["location_type"] == "Country"].copy()
+                    countries_df = countries_df[["location_name", "location_code", "country_iso_code"]].drop_duplicates()
+                    countries_df = countries_df.sort_values("location_name").reset_index(drop=True)
+                    
+                    # Save to persistent cache
+                    try:
+                        import json
+                        with open(cache_file, 'w') as f:
+                            json.dump(countries_df.to_dict('records'), f)
+                    except:
+                        pass
+                else:
+                    countries_df = pd.DataFrame()
+        
+        st.session_state[cache_key] = countries_df
+    
+    countries_df = st.session_state[cache_key]
     
     if countries_df.empty:
         st.error("Unable to load countries from DataForSEO API")
@@ -272,19 +302,49 @@ def render_language_selector(client: DataForSEOClient, serp_type: str = "google"
     Returns:
         Selected language code
     """
-    # Load languages
-    if "lang_df" not in st.session_state:
-        with st.spinner("Loading languages..."):
-            languages = client.get_languages(serp_type=serp_type)
-            lang_df = pd.DataFrame(languages)
-            if not lang_df.empty:
-                lang_df = lang_df[["language_name", "language_code"]].drop_duplicates()
-                lang_df = lang_df.sort_values("language_name").reset_index(drop=True)
-                st.session_state.lang_df = lang_df
-            else:
-                st.session_state.lang_df = pd.DataFrame()
+    storage = Storage()
+    cache_key = f"lang_df_{serp_type}"
+    cache_file = storage.base_dir / f"cache_{serp_type}_languages.json"
     
-    lang_df = st.session_state.lang_df
+    # Try to load from persistent cache first
+    if cache_key not in st.session_state:
+        lang_df = None
+        
+        # Try loading from disk cache (valid for 7 days)
+        if cache_file.exists():
+            import time
+            file_age_days = (time.time() - cache_file.stat().st_mtime) / 86400
+            if file_age_days < 7:
+                try:
+                    import json
+                    with open(cache_file, 'r') as f:
+                        cached_data = json.load(f)
+                    lang_df = pd.DataFrame(cached_data)
+                except:
+                    pass
+        
+        # If not in cache or cache expired, fetch from API
+        if lang_df is None or lang_df.empty:
+            with st.spinner("Loading languages from DataForSEO..."):
+                languages = client.get_languages(serp_type=serp_type)
+                lang_df = pd.DataFrame(languages)
+                if not lang_df.empty:
+                    lang_df = lang_df[["language_name", "language_code"]].drop_duplicates()
+                    lang_df = lang_df.sort_values("language_name").reset_index(drop=True)
+                    
+                    # Save to persistent cache
+                    try:
+                        import json
+                        with open(cache_file, 'w') as f:
+                            json.dump(lang_df.to_dict('records'), f)
+                    except:
+                        pass
+                else:
+                    lang_df = pd.DataFrame()
+        
+        st.session_state[cache_key] = lang_df
+    
+    lang_df = st.session_state[cache_key]
     
     if not lang_df.empty:
         lang_options = [f"{row.language_name} [{row.language_code}]" for row in lang_df.itertuples()]
