@@ -303,10 +303,12 @@ def standard_mode_rank_check(
             st.code(traceback.format_exc())
         
         idx += size
-        post_bar.progress(min(1.0, idx / len(keywords)), text=f"Posted {idx}/{len(keywords)} keywords")
+        batch_num = (idx // tasks_per_batch) + (1 if idx % tasks_per_batch else 0)
+        total_batches = (len(keywords) + tasks_per_batch - 1) // tasks_per_batch
+        post_bar.progress(min(1.0, idx / len(keywords)), text=f"Batch {batch_num}/{total_batches}: {idx}/{len(keywords)} keywords")
         time.sleep(0.3)
     
-    post_bar.progress(1.0, text=f"✅ Posted {len(task_ids)} tasks successfully")
+    post_bar.progress(1.0, text=f"✅ Submitted {len(keywords)} keywords in {len(task_ids)} batched tasks")
     
     if not task_ids:
         st.error("No tasks were successfully posted.")
@@ -360,17 +362,25 @@ def fetch_task_results(
         try:
             response = client.get_task_result(task_id)
             task = response.get("tasks", [{}])[0]
+            status_code = task.get("status_code")
             
-            if task.get("status_code") != 20000:
+            # Status codes:
+            # 20000 = OK (success)
+            # 5701 = Task In Queue (still processing - should continue polling)
+            # Other = actual error
+            if status_code == 5701:
+                # Task still processing, return None to indicate "not ready yet"
+                return None
+            elif status_code != 20000:
                 return {
                     "keyword": None,
                     "found": False,
-                    "note": f"GET error {task_id}: {task.get('status_message')}"
+                    "note": f"API error: {task.get('status_message')}"
                 }
             
             result_list = task.get("result", [])
             if not result_list:
-                return {"keyword": None, "found": False, "note": f"No result {task_id}"}
+                return {"keyword": None, "found": False, "note": f"No result returned"}
             
             result = result_list[0]
             keyword = result.get("keyword") or (result.get("keyword_info") or {}).get("keyword")
@@ -378,7 +388,7 @@ def fetch_task_results(
             return parse_serp_record(result, keyword, language_code, device, os_name, depth, target_domain=domain)
             
         except Exception as e:
-            return {"keyword": None, "found": False, "note": f"Fetch error {task_id}: {e}"}
+            return {"keyword": None, "found": False, "note": f"Fetch error: {e}"}
     
     # Poll and fetch ready tasks
     while pending and not (stop_event and stop_event.is_set()):
@@ -401,13 +411,23 @@ def fetch_task_results(
         
         # Fetch ready tasks in parallel
         take = list(ready_ids)[:fetch_parallel]
-        with ThreadPoolExecutor(max_workers=fetch_parallel) as executor:
-            for future in as_completed([executor.submit(fetch_one, tid) for tid in take]):
-                results.append(future.result())
-                done += 1
-                pbar.progress(min(1.0, done / max(1, total)), text=f"Fetched {done}/{total}")
+        completed_task_ids = []
         
-        pending -= set(take)
+        with ThreadPoolExecutor(max_workers=fetch_parallel) as executor:
+            futures = {executor.submit(fetch_one, tid): tid for tid in take}
+            for future in as_completed(futures):
+                task_id = futures[future]
+                result = future.result()
+                
+                if result is not None:  # None means "not ready yet" (status 5701)
+                    results.append(result)
+                    completed_task_ids.append(task_id)
+                    done += 1
+                    pbar.progress(min(1.0, done / max(1, total)), text=f"Fetched {done}/{total}")
+                # If None, task stays in pending and will be retried next poll
+        
+        # Only remove tasks that actually completed
+        pending -= set(completed_task_ids)
     
     # Handle stopped tasks
     if stop_event and stop_event.is_set():
