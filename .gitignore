@@ -29,14 +29,16 @@ env/
 # IDEs
 .vscode/
 .idea/
+.devcontainer/
 *.swp
 *.swo
 *~
 .DS_Store
+.cursorrules/
+.cursor/
 
 # Streamlit
-.streamlit/secrets.toml
-.streamlit/config.toml
+.streamlit/
 
 # Environment variables
 .env

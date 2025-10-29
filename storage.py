@@ -1,5 +1,6 @@
 """
 Persistent storage for results history and user preferences.
+Credentials are encrypted using Fernet (symmetric encryption).
 """
 import json
 import os
@@ -7,6 +8,9 @@ from pathlib import Path
 from datetime import datetime
 from typing import List, Dict, Optional
 import pandas as pd
+import base64
+from cryptography.fernet import Fernet
+import hashlib
 
 
 class Storage:
@@ -16,9 +20,32 @@ class Storage:
         self.base_dir = Path(base_dir)
         self.results_dir = self.base_dir / "results"
         self.prefs_file = self.base_dir / "preferences.json"
+        self.key_file = self.base_dir / ".key"
         
         # Create directories if they don't exist
         self.results_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Initialize encryption key
+        self._init_encryption_key()
+    
+    def _init_encryption_key(self):
+        """Initialize or load encryption key."""
+        if not self.key_file.exists():
+            # Generate a new key based on machine-specific data
+            # This ties the key to this specific machine
+            import platform
+            import uuid
+            machine_id = f"{platform.node()}-{uuid.getnode()}".encode()
+            key_material = hashlib.sha256(machine_id).digest()
+            key = base64.urlsafe_b64encode(key_material)
+            
+            with open(self.key_file, 'wb') as f:
+                f.write(key)
+        else:
+            with open(self.key_file, 'rb') as f:
+                key = f.read()
+        
+        self.cipher = Fernet(key)
     
     def save_result(self, result: Dict) -> str:
         """
@@ -125,17 +152,24 @@ class Storage:
     
     def save_preferences(self, prefs: Dict) -> None:
         """
-        Save user preferences.
+        Save user preferences (credentials are encrypted).
         
         Args:
             prefs: Dictionary of preferences (e.g., API credentials)
         """
+        # Encrypt sensitive fields
+        encrypted_prefs = prefs.copy()
+        
+        if 'user_password' in encrypted_prefs and encrypted_prefs['user_password']:
+            password_bytes = encrypted_prefs['user_password'].encode('utf-8')
+            encrypted_prefs['user_password'] = self.cipher.encrypt(password_bytes).decode('utf-8')
+        
         with open(self.prefs_file, 'w', encoding='utf-8') as f:
-            json.dump(prefs, f, indent=2)
+            json.dump(encrypted_prefs, f, indent=2)
     
     def load_preferences(self) -> Optional[Dict]:
         """
-        Load user preferences.
+        Load user preferences (decrypts credentials).
         
         Returns:
             Dictionary of preferences or None if file doesn't exist
@@ -145,7 +179,18 @@ class Storage:
         
         try:
             with open(self.prefs_file, 'r', encoding='utf-8') as f:
-                return json.load(f)
+                prefs = json.load(f)
+            
+            # Decrypt sensitive fields
+            if 'user_password' in prefs and prefs['user_password']:
+                try:
+                    encrypted_bytes = prefs['user_password'].encode('utf-8')
+                    prefs['user_password'] = self.cipher.decrypt(encrypted_bytes).decode('utf-8')
+                except Exception:
+                    # If decryption fails, clear the password
+                    prefs['user_password'] = ""
+            
+            return prefs
         except Exception as e:
             print(f"Error loading preferences: {e}")
             return None
