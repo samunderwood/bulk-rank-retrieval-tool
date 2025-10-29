@@ -25,6 +25,7 @@ setup_page_config(title="DataForSEO Rank Tool", layout="wide")
 
 # -------- UI --------
 st.title("DataForSEO Rank Retrieval")
+# Version: debug-v2
 
 # Get authenticated client
 client = render_credentials_sidebar(client_class=SERPClient)
