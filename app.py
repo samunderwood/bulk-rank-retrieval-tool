@@ -42,17 +42,26 @@ else:
 # Initialize results history in session state
 if "results_history" not in st.session_state:
     st.session_state.results_history = []
+if "loaded_result" not in st.session_state:
+    st.session_state.loaded_result = None
 
 # Show results history in sidebar
 if st.session_state.results_history:
-    with st.sidebar.expander(f"📜 Results History ({len(st.session_state.results_history)})"):
+    with st.sidebar.expander(f"📜 Results History ({len(st.session_state.results_history)})", expanded=False):
         for i, run in enumerate(reversed(st.session_state.results_history[-5:])):  # Show last 5
+            idx = len(st.session_state.results_history) - i - 1
             with st.container():
-                st.caption(f"**Run {len(st.session_state.results_history) - i}**")
-                st.text(f"🎯 {run['domain']}")
-                st.text(f"📊 {run['total']} keywords")
-                st.text(f"✅ {run['found']} found")
-                st.text(f"🕐 {run['timestamp'].strftime('%H:%M:%S')}")
+                col1, col2 = st.columns([3, 1])
+                with col1:
+                    st.caption(f"**Run {idx + 1}**")
+                    st.text(f"🎯 {run['domain']}")
+                    st.text(f"📊 {run['total']} keywords")
+                    st.text(f"✅ {run['found']} found")
+                    st.text(f"🕐 {run['timestamp'].strftime('%H:%M:%S')}")
+                with col2:
+                    if st.button("📂", key=f"load_{idx}", help="Load this result"):
+                        st.session_state.loaded_result = run
+                        st.rerun()
                 st.divider()
 
 # Mode selection
@@ -133,6 +142,142 @@ stop = c2.button("⏹️ Stop", type="secondary", use_container_width=True)
 if stop:
     st.session_state.stop_evt.set()
     st.info("Stop requested.")
+
+# Display loaded result if available
+if st.session_state.loaded_result is not None:
+    result = st.session_state.loaded_result
+    df = result['df']
+    
+    st.info(f"📂 **Loaded Result from {result['timestamp'].strftime('%Y-%m-%d %H:%M:%S')}** - Domain: {result['domain']}")
+    
+    # Add a "Clear" button
+    if st.button("🗑️ Clear Loaded Result", use_container_width=True):
+        st.session_state.loaded_result = None
+        st.rerun()
+    
+    # Reuse the results display logic (same as after a run)
+    found_count = result['found']
+    total_count = result['total']
+    
+    st.divider()
+    st.subheader("📊 Loaded Results")
+    
+    # Display results in tabs (reusing existing display code structure)
+    tab1, tab2, tab3 = st.tabs(["📋 Table View", "📈 Charts & Analytics", "💾 Export"])
+    
+    with tab1:
+        # Summary metrics
+        col1, col2, col3, col4 = st.columns(4)
+        col1.metric("Total Keywords", total_count)
+        col2.metric("Found", found_count)
+        col3.metric("Not Found", total_count - found_count)
+        if found_count > 0:
+            avg_rank = df[df["found"] == True]["organic_rank"].mean()
+            col4.metric("Avg Rank", f"{avg_rank:.1f}" if pd.notna(avg_rank) else "N/A")
+        
+        # Table
+        st.dataframe(df, width="stretch", height=400)
+        
+        # Top rankings preview
+        if found_count > 0:
+            with st.expander("🏆 Top 10 Rankings Preview"):
+                top_10 = df[df["found"] == True].nsmallest(10, "organic_rank")[
+                    ["keyword", "organic_rank", "url", "title"]
+                ]
+                st.dataframe(top_10, width="stretch")
+    
+    with tab2:
+        if found_count > 0:
+            import plotly.express as px
+            import plotly.graph_objects as go
+            
+            found_df = df[df["found"] == True].copy()
+            
+            # Rank distribution bar chart
+            st.subheader("📊 Rank Distribution")
+            rank_counts = found_df["organic_rank"].value_counts().sort_index()
+            fig = px.bar(
+                x=rank_counts.index,
+                y=rank_counts.values,
+                labels={"x": "Rank Position", "y": "Number of Keywords"},
+                title="Keywords by Rank Position"
+            )
+            st.plotly_chart(fig, use_container_width=True)
+            
+            # Rank range breakdown
+            st.subheader("🎯 Rank Range Breakdown")
+            
+            def rank_range(rank):
+                if rank <= 3: return "Top 3"
+                elif rank <= 10: return "Top 10"
+                elif rank <= 20: return "Top 20"
+                elif rank <= 50: return "Top 50"
+                else: return "Beyond 50"
+            
+            found_df["rank_range"] = found_df["organic_rank"].apply(rank_range)
+            range_counts = found_df["rank_range"].value_counts()
+            
+            fig = go.Figure(data=[go.Pie(
+                labels=range_counts.index,
+                values=range_counts.values,
+                hole=0.3
+            )])
+            fig.update_layout(title="Keywords by Rank Range")
+            st.plotly_chart(fig, use_container_width=True)
+            
+            # Stats
+            col1, col2 = st.columns(2)
+            with col1:
+                st.metric("📈 Top 3 Performance", f"{(found_df['organic_rank'] <= 3).sum() / len(found_df) * 100:.1f}%")
+                st.metric("📈 Top 10 Performance", f"{(found_df['organic_rank'] <= 10).sum() / len(found_df) * 100:.1f}%")
+            with col2:
+                st.metric("🏆 Best Rank", int(found_df["organic_rank"].min()))
+                st.metric("📊 Median Rank", int(found_df["organic_rank"].median()))
+        else:
+            st.info("No ranking data found to visualize.")
+    
+    with tab3:
+        st.subheader("💾 Download Results")
+        
+        # CSV download
+        csv = df.to_csv(index=False)
+        st.download_button(
+            label="📥 Download CSV",
+            data=csv,
+            file_name=f"rank_results_{result['domain']}_{result['timestamp'].strftime('%Y%m%d_%H%M%S')}.csv",
+            mime="text/csv",
+            use_container_width=True
+        )
+        
+        # Excel download with summary
+        from io import BytesIO
+        buffer = BytesIO()
+        with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
+            df.to_excel(writer, sheet_name='Results', index=False)
+            
+            # Create summary sheet
+            summary_data = {
+                'Metric': ['Total Keywords', 'Found', 'Not Found', 'Average Rank', 'Best Rank', 'Worst Rank'],
+                'Value': [
+                    total_count,
+                    found_count,
+                    total_count - found_count,
+                    f"{df[df['found'] == True]['organic_rank'].mean():.1f}" if found_count > 0 else "N/A",
+                    int(df[df['found'] == True]['organic_rank'].min()) if found_count > 0 else "N/A",
+                    int(df[df['found'] == True]['organic_rank'].max()) if found_count > 0 else "N/A"
+                ]
+            }
+            pd.DataFrame(summary_data).to_excel(writer, sheet_name='Summary', index=False)
+        
+        st.download_button(
+            label="📥 Download Excel (with Summary)",
+            data=buffer.getvalue(),
+            file_name=f"rank_results_{result['domain']}_{result['timestamp'].strftime('%Y%m%d_%H%M%S')}.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            use_container_width=True
+        )
+    
+    st.stop()  # Don't show the run form when viewing loaded results
 
 if run:
     st.session_state.stop_evt.clear()
