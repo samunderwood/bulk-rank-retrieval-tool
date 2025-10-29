@@ -67,7 +67,7 @@ with col1:
         "Keywords (one per line)",
         height=200,
         placeholder="youtube\nbeat maker\nmusic production\n...",
-        help="Enter up to 1000 keywords, one per line. Each keyword must be at least 3 characters."
+        help="Enter keywords, one per line. Each keyword must be at least 3 characters. Large lists will be automatically processed in batches of 1,000."
     )
 
 with col2:
@@ -95,7 +95,7 @@ with col2:
         
         Real search behavior data based on actual user clicks, not estimates.
         
-        - Up to 1000 keywords per request
+        - Process unlimited keywords (auto-batched)
         - 12 months of historical data
         - Location-specific volumes
     """)
@@ -113,72 +113,110 @@ if run:
         st.error("⚠️ Please enter at least one keyword.")
         st.stop()
     
-    if len(kws) > 1000:
-        st.error(f"⚠️ Maximum 1000 keywords allowed. You entered {len(kws)}.")
-        st.stop()
-    
     # Check keyword length
     short_keywords = [kw for kw in kws if len(kw) < 3]
     if short_keywords:
         st.error(f"⚠️ Keywords must be at least 3 characters. Too short: {', '.join(short_keywords[:5])}")
         st.stop()
     
-    # Display execution summary
-    st.info(f"""
-        **Execution Summary:**
-        - Keywords: {len(kws)}
-        - Location: {selected_location}
-        - API: Clickstream Bulk Search Volume (Live)
-    """)
+    # Calculate batches
+    BATCH_SIZE = 1000
+    total_keywords = len(kws)
+    num_batches = (total_keywords + BATCH_SIZE - 1) // BATCH_SIZE  # Ceiling division
     
-    # Execute request
+    # Display execution summary
+    if num_batches > 1:
+        st.info(f"""
+            **Execution Summary:**
+            - Total Keywords: {total_keywords:,}
+            - Batches: {num_batches} (up to {BATCH_SIZE} keywords per batch)
+            - Location: {selected_location}
+            - API: Clickstream Bulk Search Volume (Live)
+            
+            💡 Processing multiple batches sequentially...
+        """)
+    else:
+        st.info(f"""
+            **Execution Summary:**
+            - Keywords: {total_keywords}
+            - Location: {selected_location}
+            - API: Clickstream Bulk Search Volume (Live)
+        """)
+    
+    # Execute batched requests
     try:
-        with st.spinner("Fetching search volume data..."):
-            response = client.bulk_search_volume(
-                keywords=kws,
-                location_code=location_code
-            )
+        all_rows = []
+        progress_bar = st.progress(0)
+        status_text = st.empty()
         
-        # Parse results
-        if response.get("status_code") != 20000:
-            st.error(f"API Error: {response.get('status_message')}")
-            st.stop()
-        
-        tasks = response.get("tasks", [])
-        if not tasks:
-            st.error("No data returned from API.")
-            st.stop()
-        
-        task = tasks[0]
-        if task.get("status_code") != 20000:
-            st.error(f"Task Error: {task.get('status_message')}")
-            st.stop()
-        
-        results = task.get("result", [])
-        if not results or not results[0].get("items"):
-            st.error("No search volume data found.")
-            st.stop()
-        
-        items = results[0]["items"]
-        
-        # Create dataframe
-        rows = []
-        for item in items:
-            row = {
-                "keyword": item.get("keyword"),
-                "search_volume": item.get("search_volume", 0),
-                "location_code": location_code
-            }
+        for batch_idx in range(num_batches):
+            # Get batch of keywords
+            start_idx = batch_idx * BATCH_SIZE
+            end_idx = min(start_idx + BATCH_SIZE, total_keywords)
+            batch_keywords = kws[start_idx:end_idx]
             
-            # Add monthly data
-            monthly = item.get("monthly_searches", [])
-            for i, month_data in enumerate(monthly[:12]):  # Last 12 months
-                row[f"month_{i+1}"] = month_data.get("search_volume", 0)
-                row[f"month_{i+1}_label"] = f"{month_data.get('year')}-{month_data.get('month'):02d}"
+            # Update progress
+            progress = (batch_idx + 1) / num_batches
+            progress_bar.progress(progress)
+            status_text.text(f"Processing batch {batch_idx + 1} of {num_batches} ({len(batch_keywords)} keywords)...")
             
-            rows.append(row)
+            # Make API request
+            with st.spinner(f"Fetching batch {batch_idx + 1}/{num_batches}..."):
+                response = client.bulk_search_volume(
+                    keywords=batch_keywords,
+                    location_code=location_code,
+                    tag=f"batch_{batch_idx + 1}"
+                )
+            
+            # Parse results
+            if response.get("status_code") != 20000:
+                st.error(f"API Error in batch {batch_idx + 1}: {response.get('status_message')}")
+                st.stop()
+            
+            tasks = response.get("tasks", [])
+            if not tasks:
+                st.warning(f"No data returned for batch {batch_idx + 1}")
+                continue
+            
+            task = tasks[0]
+            if task.get("status_code") != 20000:
+                st.warning(f"Batch {batch_idx + 1} returned status {task.get('status_code')}: {task.get('status_message')}")
+                continue
+            
+            results = task.get("result", [])
+            if not results or not results[0].get("items"):
+                st.warning(f"No search volume data in batch {batch_idx + 1}")
+                continue
+            
+            items = results[0]["items"]
+            
+            # Process items from this batch
+            for item in items:
+                row = {
+                    "keyword": item.get("keyword"),
+                    "search_volume": item.get("search_volume", 0),
+                    "location_code": location_code,
+                    "batch": batch_idx + 1
+                }
+                
+                # Add monthly data
+                monthly = item.get("monthly_searches", [])
+                for i, month_data in enumerate(monthly[:12]):  # Last 12 months
+                    row[f"month_{i+1}"] = month_data.get("search_volume", 0)
+                    row[f"month_{i+1}_label"] = f"{month_data.get('year')}-{month_data.get('month'):02d}"
+                
+                all_rows.append(row)
         
-        df = pd.DataFrame(rows)
+        # Complete progress
+        progress_bar.progress(1.0)
+        status_text.empty()
+        
+        # Create combined dataframe
+        if not all_rows:
+            st.error("No search volume data retrieved from any batch.")
+            st.stop()
+        
+        df = pd.DataFrame(all_rows)
         
         # Store in session state
         st.session_state.sv_results_df = df
@@ -186,7 +224,10 @@ if run:
         st.session_state.sv_selected_location = selected_location
         
         # Show completion
-        st.success(f"✅ **Complete!** Retrieved search volume for {len(df)} keywords")
+        if num_batches > 1:
+            st.success(f"✅ **Complete!** Retrieved search volume for {len(df):,} keywords across {num_batches} batches")
+        else:
+            st.success(f"✅ **Complete!** Retrieved search volume for {len(df)} keywords")
     
     except Exception as e:
         st.error(f"Error: {e}")
