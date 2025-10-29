@@ -5,6 +5,7 @@ import streamlit as st
 import pandas as pd
 from typing import Optional, Tuple
 from dataforseo_client import DataForSEOClient
+from storage import Storage
 
 
 def setup_page_config(title: str = "DataForSEO Tool", layout: str = "wide"):
@@ -22,9 +23,20 @@ def render_credentials_sidebar(client_class=DataForSEOClient) -> Optional[Tuple]
     Returns:
         Tuple of (client instance, headers dict, auth tuple) or None
     """
-    # Initialize session state
+    storage = Storage()
+    
+    # Initialize session state - load from storage if available
     if "user_login" not in st.session_state:
-        st.session_state.user_login = ""
+        saved_prefs = storage.load_preferences()
+        if saved_prefs and saved_prefs.get("remember_creds"):
+            st.session_state.user_login = saved_prefs.get("user_login", "")
+            st.session_state.user_password = saved_prefs.get("user_password", "")
+            st.session_state.remember_creds = True
+        else:
+            st.session_state.user_login = ""
+            st.session_state.user_password = ""
+            st.session_state.remember_creds = False
+    
     if "user_password" not in st.session_state:
         st.session_state.user_password = ""
     if "remember_creds" not in st.session_state:
@@ -73,15 +85,30 @@ def render_credentials_sidebar(client_class=DataForSEOClient) -> Optional[Tuple]
     remember = st.sidebar.checkbox(
         "Remember credentials",
         value=st.session_state.remember_creds,
-        help="Keep credentials for this browser session"
+        help="Persist credentials across page refreshes (saved locally)"
     )
     
     if remember and user_login and user_password:
         st.session_state.user_login = user_login
         st.session_state.user_password = user_password
         st.session_state.remember_creds = True
+        
+        # Save to persistent storage
+        try:
+            storage.save_preferences({
+                "remember_creds": True,
+                "user_login": user_login,
+                "user_password": user_password
+            })
+        except Exception as e:
+            st.sidebar.warning(f"⚠️ Could not save credentials: {e}")
     elif not remember:
         st.session_state.remember_creds = False
+        # Clear from storage
+        try:
+            storage.clear_preferences()
+        except:
+            pass
     
     # Clear credentials button
     if st.session_state.user_login or st.session_state.user_password:
@@ -90,6 +117,11 @@ def render_credentials_sidebar(client_class=DataForSEOClient) -> Optional[Tuple]
             st.session_state.user_password = ""
             st.session_state.remember_creds = False
             st.session_state.credentials_verified = False
+            # Clear from persistent storage
+            try:
+                storage.clear_preferences()
+            except:
+                pass
             st.rerun()
     
     if user_login and user_password:

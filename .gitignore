@@ -50,6 +50,11 @@ env/
 *.xlsx
 *.xls
 
+# Local storage
+data/
+*.db
+*.sqlite
+
 # Testing
 .pytest_cache/
 .coverage

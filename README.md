@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 # Bulk Rank Retrieval Tool
 
 A Streamlit-based web application for bulk keyword rank checking using the DataForSEO API.
@@ -98,8 +97,3 @@ MIT License
 ## Credits
 
 Built with [Streamlit](https://streamlit.io/) and [DataForSEO API](https://dataforseo.com/)
-=======
-# rank-retriver
-Uses the DataForSEO API to retrieve ranking data
->>>>>>> 6e68418770c65439df7fe406f216517d83f20ffa
-
