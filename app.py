@@ -12,24 +12,10 @@ setup_page_config(title="DataForSEO SEO Tools", layout="wide")
 
 st.title("🚀 DataForSEO SEO Tools")
 
-st.info("💡 **Quick Tip:** Use the sidebar (←) to navigate between tools. Your credentials will persist across all pages!")
-
 st.markdown("""
 Welcome to the DataForSEO SEO Tools suite! This application provides powerful SEO analysis tools powered by DataForSEO APIs.
 
 ## 📋 Available Tools
-
-### 📊 Rank Tracking
-Track your website's search engine rankings for multiple keywords across different locations and devices.
-
-**Features:**
-- ✅ Live mode (immediate results)
-- ✅ Standard mode (batched processing for large keyword lists)
-- ✅ Support for 1000+ keywords
-- ✅ Desktop & mobile tracking
-- ✅ Historical results browser
-- ✅ Interactive charts & analytics
-- ✅ CSV & Excel export
 
 """)
 
@@ -87,9 +73,6 @@ Having issues? Check out:
 - [GitHub Issues](https://github.com/samunderwood/bulk-rank-retrieval-tool/issues)
 """)
 
-# Sidebar credentials
-st.sidebar.title("🔐 API Credentials")
-st.sidebar.markdown("Enter your DataForSEO credentials to use the tools.")
 
 client = render_credentials_sidebar(SERPClient)
 
