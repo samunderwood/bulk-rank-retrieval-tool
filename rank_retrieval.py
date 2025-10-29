@@ -240,18 +240,38 @@ def standard_mode_rank_check(
         } for kw in chunk]
         
         try:
+            st.write(f"DEBUG: Posting batch of {len(chunk)} keywords...")
             response = client.post_tasks(payload)
+            st.write(f"DEBUG: Got response type: {type(response)}")
+            st.write(f"DEBUG: Response keys: {response.keys() if isinstance(response, dict) else 'Not a dict'}")
             
-            for task in response.get("tasks", []):
+            if not isinstance(response, dict):
+                st.error(f"ERROR: Response is not a dictionary! Got: {type(response)}")
+                st.code(str(response))
+                continue
+            
+            tasks = response.get("tasks", [])
+            st.write(f"DEBUG: Found {len(tasks)} tasks in response")
+            
+            if not tasks:
+                st.warning("No tasks in response!")
+                st.code(str(response))
+                continue
+            
+            for task in tasks:
                 status_code = task.get("status_code")
+                st.write(f"DEBUG: Task status code: {status_code}")
+                
                 # 20100 = successfully created task
                 if status_code == 20100 and task.get("result"):
                     task_ids.append(task["result"][0]["id"])
+                    st.success(f"✅ Task created: {task['result'][0]['id']}")
                 elif status_code != 20100:
                     # Log non-success status codes for debugging
-                    st.warning(f"Task failed with status {status_code}: {task.get('status_message', 'Unknown error')}")
+                    st.error(f"❌ Task failed with status {status_code}: {task.get('status_message', 'Unknown error')}")
+                    st.code(str(task))
         except Exception as e:
-            st.error(f"Error posting batch: {e}")
+            st.error(f"💥 Exception posting batch: {e}")
             import traceback
             st.code(traceback.format_exc())
         
