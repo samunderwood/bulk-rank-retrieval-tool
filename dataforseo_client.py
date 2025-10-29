@@ -197,26 +197,6 @@ class SERPClient(DataForSEOClient):
         return response.json()
 
 
-class KeywordsDataClient(DataForSEOClient):
-    """
-    Client for Keywords Data API (search volume, suggestions, etc.)
-    Future expansion placeholder.
-    """
-    
-    def __init__(self, login: str = None, password: str = None, api_key: str = None):
-        super().__init__(login, password, api_key)
-    
-    def get_search_volume(self, keywords: List[str], location_code: int, 
-                          language_code: str) -> Dict:
-        """Get search volume data for keywords."""
-        endpoint = "keywords_data/google_ads/search_volume/live"
-        tasks = [{
-            "keywords": keywords,
-            "location_code": location_code,
-            "language_code": language_code
-        }]
-        response = self._request("POST", endpoint, data=tasks)
-        return response.json()
 
 
 class BacklinksClient(DataForSEOClient):
@@ -241,4 +221,57 @@ class OnPageClient(DataForSEOClient):
         super().__init__(login, password, api_key)
     
     # Add on-page methods here as needed
+
+
+class KeywordsDataClient(DataForSEOClient):
+    """
+    Client for Keywords Data API (search volume, clickstream data, keyword suggestions).
+    
+    Reference: https://docs.dataforseo.com/v3/keywords_data/overview/
+    """
+    
+    def __init__(self, login: str = None, password: str = None, api_key: str = None):
+        super().__init__(login, password, api_key)
+    
+    def get_locations_and_languages(self):
+        """
+        Get available locations and languages for clickstream data.
+        
+        Reference: https://docs.dataforseo.com/v3/keywords_data/clickstream_data/locations_and_languages/
+        
+        Returns:
+            dict: Response with available locations and languages
+        """
+        return self._make_request(
+            "GET",
+            "/v3/keywords_data/clickstream_data/locations_and_languages"
+        )
+    
+    def bulk_search_volume(self, keywords: list, location_code: int, tag: str = None):
+        """
+        Get clickstream-based search volume for up to 1000 keywords.
+        
+        Reference: https://docs.dataforseo.com/v3/keywords_data/clickstream_data/bulk_search_volume/live/
+        
+        Args:
+            keywords: List of keywords (up to 1000, min 3 chars each)
+            location_code: Location code from locations_and_languages endpoint
+            tag: Optional task identifier
+        
+        Returns:
+            dict: Response with search volume data and 12-month history
+        """
+        payload = [{
+            "keywords": keywords,
+            "location_code": location_code
+        }]
+        
+        if tag:
+            payload[0]["tag"] = tag
+        
+        return self._make_request(
+            "POST",
+            "/v3/keywords_data/clickstream_data/bulk_search_volume/live",
+            json=payload
+        )
 
