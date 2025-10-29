@@ -30,32 +30,24 @@ Track your website's search engine rankings for multiple keywords across differe
 - ✅ Historical results browser
 - ✅ Interactive charts & analytics
 - ✅ CSV & Excel export
+
 """)
 
+# Navigation buttons
 col1, col2 = st.columns(2)
 
 with col1:
-    if st.button("📊 Go to Rank Tracking", use_container_width=True, type="primary"):
-        st.switch_page("pages/1_📊_Rank_Tracking.py")
-
-st.markdown("""
----
-
-### 🔍 Search Volume
-Get clickstream-based search volume data for up to 1000 keywords with 12 months of historical data.
-
-**Features:**
-- ✅ Real clickstream data (not estimates!)
-- ✅ 12-month historical trends
-- ✅ Up to 1000 keywords per request
-- ✅ Location-specific volume
-- ✅ Monthly trend charts
-- ✅ CSV & Excel export
-""")
+    rank_tracking_btn = st.button("📊 Go to Rank Tracking", use_container_width=True, type="primary", key="btn_rank")
 
 with col2:
-    if st.button("🔍 Go to Search Volume", use_container_width=True, type="primary"):
-        st.switch_page("pages/2_🔍_Search_Volume.py")
+    search_volume_btn = st.button("🔍 Go to Search Volume", use_container_width=True, type="primary", key="btn_search")
+
+# Handle navigation
+if rank_tracking_btn:
+    st.switch_page("pages/1_📊_Rank_Tracking.py")
+
+if search_volume_btn:
+    st.switch_page("pages/2_🔍_Search_Volume.py")
 
 st.markdown("""
 
