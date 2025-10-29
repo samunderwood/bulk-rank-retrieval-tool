@@ -54,6 +54,7 @@ env/
 .pytest_cache/
 .coverage
 htmlcov/
+docs/
 
 # Cursor AI
 .cursorrules/

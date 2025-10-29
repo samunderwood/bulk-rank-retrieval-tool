@@ -274,4 +274,164 @@ class KeywordsDataClient(DataForSEOClient):
             data=payload
         )
         return response.json()
+    
+    # Google Trends Methods
+    
+    def get_trends_locations(self, country: str = None):
+        """
+        Get available locations for Google Trends.
+        
+        Reference: https://docs.dataforseo.com/v3/keywords_data/google_trends/locations/
+        
+        Args:
+            country: Optional country ISO code to filter locations (e.g., 'us')
+        
+        Returns:
+            dict: Response with available locations
+        """
+        endpoint = "keywords_data/google_trends/locations"
+        if country:
+            endpoint += f"/{country.lower()}"
+        
+        response = self._request("GET", endpoint)
+        return response.json()
+    
+    def get_trends_languages(self):
+        """
+        Get available languages for Google Trends.
+        
+        Reference: https://docs.dataforseo.com/v3/keywords_data/google_trends/languages/
+        
+        Returns:
+            dict: Response with available languages
+        """
+        response = self._request("GET", "keywords_data/google_trends/languages")
+        return response.json()
+    
+    def trends_explore_live(self, keywords: list, location_name: str = None, location_code: int = None,
+                           language_code: str = "en", type: str = "web", category_code: int = 0,
+                           date_from: str = None, date_to: str = None, time_range: str = None,
+                           item_types: list = None, tag: str = None):
+        """
+        Get Google Trends data (Live mode - immediate results).
+        
+        Reference: https://docs.dataforseo.com/v3/keywords_data/google_trends/explore/live/
+        
+        Args:
+            keywords: List of keywords (max 5, max 100 chars each)
+            location_name: Full location name (e.g., "United States")
+            location_code: Location code (e.g., 2840)
+            language_code: Language code (default: "en")
+            type: Trends type - web, news, youtube, images, froogle (default: "web")
+            category_code: Category code (default: 0 for all categories)
+            date_from: Start date "yyyy-mm-dd" format
+            date_to: End date "yyyy-mm-dd" format
+            time_range: Preset range (past_hour, past_day, past_7_days, past_30_days, etc.)
+            item_types: Types to return (google_trends_graph, google_trends_map, etc.)
+            tag: Optional task identifier
+        
+        Returns:
+            dict: Response with trends data
+        """
+        payload = [{
+            "keywords": keywords,
+            "language_code": language_code,
+            "type": type,
+            "category_code": category_code
+        }]
+        
+        if location_name:
+            payload[0]["location_name"] = location_name
+        if location_code:
+            payload[0]["location_code"] = location_code
+        if date_from:
+            payload[0]["date_from"] = date_from
+        if date_to:
+            payload[0]["date_to"] = date_to
+        if time_range:
+            payload[0]["time_range"] = time_range
+        if item_types:
+            payload[0]["item_types"] = item_types
+        if tag:
+            payload[0]["tag"] = tag
+        
+        response = self._request(
+            "POST",
+            "keywords_data/google_trends/explore/live",
+            data=payload
+        )
+        return response.json()
+    
+    def trends_explore_post(self, keywords: list, location_name: str = None, location_code: int = None,
+                           language_code: str = "en", type: str = "web", category_code: int = 0,
+                           date_from: str = None, date_to: str = None, time_range: str = None,
+                           item_types: list = None, tag: str = None):
+        """
+        Post Google Trends task (Standard mode - retrieve later).
+        
+        Reference: https://docs.dataforseo.com/v3/keywords_data/google_trends/explore/task_post/
+        
+        Args: Same as trends_explore_live()
+        
+        Returns:
+            dict: Response with task ID
+        """
+        payload = [{
+            "keywords": keywords,
+            "language_code": language_code,
+            "type": type,
+            "category_code": category_code
+        }]
+        
+        if location_name:
+            payload[0]["location_name"] = location_name
+        if location_code:
+            payload[0]["location_code"] = location_code
+        if date_from:
+            payload[0]["date_from"] = date_from
+        if date_to:
+            payload[0]["date_to"] = date_to
+        if time_range:
+            payload[0]["time_range"] = time_range
+        if item_types:
+            payload[0]["item_types"] = item_types
+        if tag:
+            payload[0]["tag"] = tag
+        
+        response = self._request(
+            "POST",
+            "keywords_data/google_trends/explore/task_post",
+            data=payload
+        )
+        return response.json()
+    
+    def trends_explore_tasks_ready(self):
+        """
+        Get list of completed Google Trends tasks.
+        
+        Reference: https://docs.dataforseo.com/v3/keywords_data/google_trends/explore/tasks_ready/
+        
+        Returns:
+            dict: Response with completed task IDs
+        """
+        response = self._request("GET", "keywords_data/google_trends/explore/tasks_ready")
+        return response.json()
+    
+    def trends_explore_get_result(self, task_id: str):
+        """
+        Get results for a specific Google Trends task.
+        
+        Reference: https://docs.dataforseo.com/v3/keywords_data/google_trends/explore/task_get/
+        
+        Args:
+            task_id: Task ID from task_post
+        
+        Returns:
+            dict: Task results with trends data
+        """
+        response = self._request(
+            "GET",
+            f"keywords_data/google_trends/explore/task_get/{task_id}"
+        )
+        return response.json()
 

@@ -20,7 +20,7 @@ Welcome to the DataForSEO SEO Tools suite! This application provides powerful SE
 """)
 
 # Navigation buttons with descriptions
-col1, col2 = st.columns(2)
+col1, col2, col3 = st.columns(3)
 
 with col1:
     st.markdown("### 📊 Rank Tracking")
@@ -32,12 +32,20 @@ with col2:
     st.markdown("Get clickstream-based search volume data with 12-month historical trends. Process unlimited keywords automatically.")
     search_volume_btn = st.button("Go to Search Volume", use_container_width=True, type="primary", key="btn_search")
 
+with col3:
+    st.markdown("### 📈 Google Trends")
+    st.markdown("Analyze keyword popularity trends over time with related topics and queries. Compare up to 5 keywords.")
+    google_trends_btn = st.button("Go to Google Trends", use_container_width=True, type="primary", key="btn_trends")
+
 # Handle navigation
 if rank_tracking_btn:
     st.switch_page("pages/1_📊_Rank_Tracking.py")
 
 if search_volume_btn:
     st.switch_page("pages/2_🔍_Search_Volume.py")
+
+if google_trends_btn:
+    st.switch_page("pages/3_📈_Google_Trends.py")
 
 st.markdown("""
 
