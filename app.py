@@ -207,10 +207,18 @@ def std_fetch(task_ids: List[str], headers, auth, poll_s: float, fetch_parallel:
 st.title("DataForSEO Rank Retrieval")
 
 # Info banner
-st.info("👈 **Enter your DataForSEO credentials in the sidebar to get started.** Your credentials are only used for this session and are never stored.")
+st.info("👈 **Enter your DataForSEO credentials in the sidebar to get started.** Check 'Remember credentials' to keep them for your browser session.")
 
 # Check if admin credentials exist in secrets (for private deployment)
 admin_auth = make_headers()
+
+# Initialize session state for credentials
+if "user_login" not in st.session_state:
+    st.session_state.user_login = ""
+if "user_password" not in st.session_state:
+    st.session_state.user_password = ""
+if "remember_creds" not in st.session_state:
+    st.session_state.remember_creds = False
 
 # Credentials input section
 st.sidebar.header("🔐 DataForSEO Credentials")
@@ -224,8 +232,44 @@ if admin_auth:
         headers, auth = admin_auth
         st.sidebar.success("✅ Using configured credentials")
     else:
-        user_login = st.sidebar.text_input("Login", type="default", placeholder="your_login")
-        user_password = st.sidebar.text_input("Password", type="password", placeholder="your_password")
+        # Use session state for default values to persist during session
+        user_login = st.sidebar.text_input(
+            "Login", 
+            type="default", 
+            placeholder="your_login",
+            value=st.session_state.user_login,
+            key="login_input"
+        )
+        user_password = st.sidebar.text_input(
+            "Password", 
+            type="password", 
+            placeholder="your_password",
+            value=st.session_state.user_password,
+            key="password_input"
+        )
+        
+        # Remember credentials checkbox
+        remember = st.sidebar.checkbox(
+            "Remember credentials", 
+            value=st.session_state.remember_creds,
+            help="Keep credentials for this browser session"
+        )
+        
+        # Update session state if remember is checked
+        if remember and user_login and user_password:
+            st.session_state.user_login = user_login
+            st.session_state.user_password = user_password
+            st.session_state.remember_creds = True
+        elif not remember:
+            st.session_state.remember_creds = False
+        
+        # Clear credentials button
+        if st.session_state.user_login or st.session_state.user_password:
+            if st.sidebar.button("🗑️ Clear saved credentials"):
+                st.session_state.user_login = ""
+                st.session_state.user_password = ""
+                st.session_state.remember_creds = False
+                st.rerun()
         
         if user_login and user_password:
             headers = {"Content-Type": "application/json"}
@@ -235,8 +279,43 @@ if admin_auth:
             st.stop()
 else:
     # No admin credentials - user must provide their own
-    user_login = st.sidebar.text_input("Login", type="default", placeholder="your_login")
-    user_password = st.sidebar.text_input("Password", type="password", placeholder="your_password")
+    user_login = st.sidebar.text_input(
+        "Login", 
+        type="default", 
+        placeholder="your_login",
+        value=st.session_state.user_login,
+        key="login_input"
+    )
+    user_password = st.sidebar.text_input(
+        "Password", 
+        type="password", 
+        placeholder="your_password",
+        value=st.session_state.user_password,
+        key="password_input"
+    )
+    
+    # Remember credentials checkbox
+    remember = st.sidebar.checkbox(
+        "Remember credentials", 
+        value=st.session_state.remember_creds,
+        help="Keep credentials for this browser session"
+    )
+    
+    # Update session state if remember is checked
+    if remember and user_login and user_password:
+        st.session_state.user_login = user_login
+        st.session_state.user_password = user_password
+        st.session_state.remember_creds = True
+    elif not remember:
+        st.session_state.remember_creds = False
+    
+    # Clear credentials button
+    if st.session_state.user_login or st.session_state.user_password:
+        if st.sidebar.button("🗑️ Clear saved credentials"):
+            st.session_state.user_login = ""
+            st.session_state.user_password = ""
+            st.session_state.remember_creds = False
+            st.rerun()
     
     if user_login and user_password:
         headers = {"Content-Type": "application/json"}
