@@ -13,11 +13,19 @@ A Streamlit-based web application for bulk keyword rank checking using the DataF
 
 ## Prerequisites
 
-- Python 3.8+
-- DataForSEO API credentials (login/password or API key)
-- Streamlit
+- DataForSEO API credentials ([Sign up here](https://dataforseo.com/))
+- For local development: Python 3.8+
 
-## Installation
+## Public Access
+
+This app is designed for public use. **Users provide their own DataForSEO credentials** through the sidebar interface. Credentials are:
+- ✅ Only used for the current session
+- ✅ Never stored or logged
+- ✅ Transmitted securely to DataForSEO API only
+
+**Don't have DataForSEO credentials?** [Get API access here](https://dataforseo.com/)
+
+## Local Installation
 
 1. Clone the repository:
 ```bash
@@ -30,7 +38,7 @@ cd bulk-rank-retrieval-tool
 pip install -r requirements.txt
 ```
 
-3. Set up your DataForSEO credentials in `.streamlit/secrets.toml`:
+3. (Optional) For private deployment, set up admin credentials in `.streamlit/secrets.toml`:
 ```toml
 DATAFORSEO_LOGIN = "your_login"
 DATAFORSEO_PASSWORD = "your_password"
@@ -40,12 +48,24 @@ DATAFORSEO_API_KEY = "your_api_key"
 
 ## Usage
 
+### Public Deployment (Streamlit Cloud)
+
+1. Visit the deployed app
+2. Enter your DataForSEO credentials in the sidebar:
+   - Choose "Login & Password" or "API Key"
+   - Enter your credentials
+   - Credentials are verified before proceeding
+3. Configure your search parameters
+4. Enter keywords and click "Run"
+
+### Local Development
+
 Run the application:
 ```bash
 streamlit run app.py
 ```
 
-Then navigate to `http://localhost:8501` in your browser.
+Then navigate to `http://localhost:8501` in your browser and enter your credentials in the sidebar.
 
 ### Live Mode
 - Immediate results for each keyword

@@ -206,22 +206,66 @@ def std_fetch(task_ids: List[str], headers, auth, poll_s: float, fetch_parallel:
 # -------- UI --------
 st.title("DataForSEO Rank Retrieval")
 
-# Check credentials first
-auth_result = make_headers()
-if not auth_result:
-    st.error("⚠️ **Missing DataForSEO API Credentials**")
-    st.info("Please configure your API credentials in Streamlit secrets:")
-    st.code("""
-# In .streamlit/secrets.toml or Streamlit Cloud Secrets:
-DATAFORSEO_LOGIN = "your_login"
-DATAFORSEO_PASSWORD = "your_password"
-# OR
-DATAFORSEO_API_KEY = "your_api_key"
-    """)
-    st.stop()
+# Info banner
+st.info("👈 **Enter your DataForSEO credentials in the sidebar to get started.** Your credentials are only used for this session and are never stored.")
 
-headers, auth = auth_result
+# Check if admin credentials exist in secrets (for private deployment)
+admin_auth = make_headers()
+
+# Credentials input section
+st.sidebar.header("🔐 API Credentials")
+st.sidebar.info("This app requires DataForSEO API credentials. Don't have an account? [Sign up here](https://dataforseo.com/)")
+
+use_own_creds = st.sidebar.checkbox("Use my own credentials", value=True)
+
+if use_own_creds:
+    auth_method = st.sidebar.radio("Authentication Method", ["Login & Password", "API Key"])
+    
+    if auth_method == "Login & Password":
+        user_login = st.sidebar.text_input("DataForSEO Login", type="default")
+        user_password = st.sidebar.text_input("DataForSEO Password", type="password")
+        
+        if user_login and user_password:
+            headers = {"Content-Type": "application/json"}
+            auth = ("basic", (user_login, user_password))
+        else:
+            st.warning("⚠️ Please enter your DataForSEO login and password in the sidebar to continue.")
+            st.stop()
+    else:
+        user_api_key = st.sidebar.text_input("DataForSEO API Key", type="password", 
+                                             help="Format: login:password or base64 encoded")
+        
+        if user_api_key:
+            headers = {"Content-Type": "application/json"}
+            token = base64.b64encode(user_api_key.encode()).decode() if ":" in user_api_key else user_api_key
+            headers["Authorization"] = f"Basic {token}"
+            auth = ("header", None)
+        else:
+            st.warning("⚠️ Please enter your DataForSEO API key in the sidebar to continue.")
+            st.stop()
+else:
+    # Use admin credentials from secrets (only works if secrets are configured)
+    if not admin_auth:
+        st.error("⚠️ **No admin credentials configured**")
+        st.info("Please check 'Use my own credentials' in the sidebar and enter your DataForSEO credentials.")
+        st.stop()
+    headers, auth = admin_auth
+
 sess = make_session(*auth)
+
+# Test credentials with a simple API call
+try:
+    with st.spinner("Verifying credentials..."):
+        test_response = sess.get(f"{API_BASE}/serp/google/languages", headers=headers, timeout=10)
+        if test_response.status_code == 401:
+            st.error("❌ **Invalid credentials**. Please check your DataForSEO login/password or API key.")
+            st.stop()
+        elif test_response.status_code != 200:
+            st.error(f"❌ **API Error**: {test_response.status_code} - {test_response.text}")
+            st.stop()
+except requests.exceptions.RequestException as e:
+    st.error(f"❌ **Connection Error**: Unable to connect to DataForSEO API. {str(e)}")
+    st.stop()
 
 # Initialize session state for caching
 if "countries_df" not in st.session_state:
