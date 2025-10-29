@@ -146,9 +146,9 @@ def verify_credentials(client: DataForSEOClient) -> bool:
     Returns:
         True if credentials are valid, False otherwise
     """
-    # Show tip only on first verification
-    if not st.session_state.get("credentials_verified", False):
-        st.info("👈 **Tip:** Check 'Remember credentials' in the sidebar to keep them for your browser session.")
+    # Show tip only if credentials are NOT remembered
+    if not st.session_state.get("credentials_verified", False) and not st.session_state.get("remember_creds", False):
+        st.info("👈 **Tip:** Check 'Remember credentials' in the sidebar to persist them across page refreshes.")
     
     try:
         with st.spinner("Verifying credentials..."):
