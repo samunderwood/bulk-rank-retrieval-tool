@@ -305,10 +305,16 @@ def standard_mode_rank_check(
         idx += size
         batch_num = (idx // tasks_per_batch) + (1 if idx % tasks_per_batch else 0)
         total_batches = (len(keywords) + tasks_per_batch - 1) // tasks_per_batch
-        post_bar.progress(min(1.0, idx / len(keywords)), text=f"Batch {batch_num}/{total_batches}: {idx}/{len(keywords)} keywords")
+        post_bar.progress(min(1.0, idx / len(keywords)), text=f"Batch {batch_num}/{total_batches}: {idx}/{len(keywords)} tasks")
         time.sleep(0.3)
     
-    post_bar.progress(1.0, text=f"✅ Submitted {len(keywords)} keywords in {len(task_ids)} batched tasks")
+    # Note: In DataForSEO, 1 keyword = 1 task. Multiple tasks go in 1 API request (batch).
+    # We can send up to 100 tasks per API request.
+    total_batches = (len(keywords) + tasks_per_batch - 1) // tasks_per_batch
+    if total_batches == 1:
+        post_bar.progress(1.0, text=f"✅ Submitted {len(task_ids)} tasks in 1 batch")
+    else:
+        post_bar.progress(1.0, text=f"✅ Submitted {len(task_ids)} tasks in {total_batches} batches")
     
     if not task_ids:
         st.error("No tasks were successfully posted.")
