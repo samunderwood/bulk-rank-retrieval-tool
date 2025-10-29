@@ -11,19 +11,21 @@ API_BASE = "https://api.dataforseo.com/v3"
 st.set_page_config(page_title="DataForSEO Rank Tool", layout="wide")
 
 # -------- Auth --------
-def make_headers() -> Tuple[Dict[str, str], Tuple[str, Optional[Tuple[str,str]]]]:
+def make_headers() -> Optional[Tuple[Dict[str, str], Tuple[str, Optional[Tuple[str,str]]]]]:
     headers = {"Content-Type": "application/json"}
-    login = st.secrets.get("DATAFORSEO_LOGIN")
-    password = st.secrets.get("DATAFORSEO_PASSWORD")
-    api_key = st.secrets.get("DATAFORSEO_API_KEY") or st.secrets.get("dataforseo-api-key")
-    if login and password:
-        return headers, ("basic", (login, password))
-    elif api_key:
-        token = base64.b64encode(api_key.encode()).decode() if ":" in api_key else api_key
-        headers["Authorization"] = f"Basic {token}"
-        return headers, ("header", None)
-    else:
-        st.stop()
+    try:
+        login = st.secrets.get("DATAFORSEO_LOGIN")
+        password = st.secrets.get("DATAFORSEO_PASSWORD")
+        api_key = st.secrets.get("DATAFORSEO_API_KEY") or st.secrets.get("dataforseo-api-key")
+        if login and password:
+            return headers, ("basic", (login, password))
+        elif api_key:
+            token = base64.b64encode(api_key.encode()).decode() if ":" in api_key else api_key
+            headers["Authorization"] = f"Basic {token}"
+            return headers, ("header", None)
+    except:
+        pass
+    return None
 
 def make_session(auth_mode, creds):
     s = requests.Session()
@@ -54,6 +56,23 @@ def pick_country_code(df: pd.DataFrame, iso: str) -> Optional[int]:
     iso = iso.upper()
     hit = df[(df["country_iso_code"].str.upper()==iso) & (df["location_type"]=="Country")]
     return int(hit.iloc[0]["location_code"]) if not hit.empty else None
+
+@st.cache_data(ttl=3600)
+def get_all_countries(_sess, _headers) -> pd.DataFrame:
+    """Get all available countries from DataForSEO"""
+    try:
+        r = _sess.get(f"{API_BASE}/serp/google/locations", headers=_headers, timeout=120)
+        r.raise_for_status()
+        tasks = r.json().get("tasks", [])
+        df = pd.DataFrame(tasks[0].get("result", [])) if tasks else pd.DataFrame()
+        if not df.empty:
+            countries = df[df["location_type"] == "Country"].copy()
+            countries = countries[["location_name", "location_code", "country_iso_code"]].drop_duplicates()
+            countries = countries.sort_values("location_name").reset_index(drop=True)
+            return countries
+    except Exception as e:
+        st.error(f"Failed to fetch countries: {e}")
+    return pd.DataFrame(columns=["location_name", "location_code", "country_iso_code"])
 
 def parse_record(res, kw, lang, device, os_name, depth):
     record = {
@@ -186,70 +205,135 @@ def std_fetch(task_ids: List[str], headers, auth, poll_s: float, fetch_parallel:
 
 # -------- UI --------
 st.title("DataForSEO Rank Retrieval")
+
+# Check credentials first
+auth_result = make_headers()
+if not auth_result:
+    st.error("⚠️ **Missing DataForSEO API Credentials**")
+    st.info("Please configure your API credentials in Streamlit secrets:")
+    st.code("""
+# In .streamlit/secrets.toml or Streamlit Cloud Secrets:
+DATAFORSEO_LOGIN = "your_login"
+DATAFORSEO_PASSWORD = "your_password"
+# OR
+DATAFORSEO_API_KEY = "your_api_key"
+    """)
+    st.stop()
+
+headers, auth = auth_result
+sess = make_session(*auth)
+
+# Initialize session state for caching
+if "countries_df" not in st.session_state:
+    with st.spinner("Loading countries..."):
+        st.session_state.countries_df = get_all_countries(sess, headers)
+
+if "lang_df" not in st.session_state:
+    with st.spinner("Loading languages..."):
+        st.session_state.lang_df = get_languages(sess, headers)
+
+countries_df = st.session_state.countries_df
+lang_df = st.session_state.lang_df
+
+# Mode selection
 mode = st.radio("Mode", ["Live (immediate)", "Standard (batched)"], horizontal=True)
 
+# Main inputs
+st.subheader("Target Configuration")
 colA, colB = st.columns([1,1])
+
 with colA:
-    domain = st.text_input("Target domain", placeholder="example.com (no https)")
+    domain = st.text_input("Target domain", placeholder="example.com (no https)", help="Enter domain without https://")
+    
+    # Country selection with searchable dropdown
+    if not countries_df.empty:
+        country_options = [f"{row.location_name} ({row.country_iso_code}) [{row.location_code}]" 
+                          for row in countries_df.itertuples()]
+        # Default to United Kingdom
+        default_idx = 0
+        for idx, row in enumerate(countries_df.itertuples()):
+            if row.country_iso_code.upper() == "GB":
+                default_idx = idx
+                break
+        
+        country_selection = st.selectbox(
+            "Country", 
+            country_options,
+            index=default_idx,
+            help="Select the country for search rankings"
+        )
+    else:
+        st.error("Unable to load countries from DataForSEO API")
+        st.stop()
+
 with colB:
     device = st.radio("Device", ["desktop", "mobile"], horizontal=True)
     os_name = st.selectbox("OS", ["windows","macos"] if device=="desktop" else ["android","ios"])
 
-headers, auth = make_headers()
-sess = make_session(*auth)
-
-# Fetch all locations to build country list
-all_loc_df = get_locations(sess, headers, None)
-lang_df = get_languages(sess, headers)
-
-# Build searchable country list
-if not all_loc_df.empty:
-    countries = all_loc_df[all_loc_df["location_type"] == "Country"].copy()
-    countries = countries.sort_values("location_name").drop_duplicates(subset=["country_iso_code"])
-    country_options = [f"{row.location_name} [{row.country_iso_code}]" for row in countries.itertuples()]
-    # Find default (United Kingdom)
-    default_idx = next((i for i, opt in enumerate(country_options) if "[GB]" in opt.upper()), 0)
-    country_selection = st.selectbox("Country", country_options, index=default_idx)
-    # Extract ISO code from selection
-    country_iso = country_selection.split("[")[-1].split("]")[0] if "[" in country_selection else "gb"
-else:
-    country_iso = st.text_input("Country ISO", value="gb")
-
-# Fetch locations for selected country
-loc_df = get_locations(sess, headers, country_iso or None)
+# Language selection
 lang_options = [f"{r.language_name} [{r.language_code}]" for r in lang_df.itertuples()] or ["English [en]"]
-language = st.selectbox("Language", lang_options, index=(lang_options.index("English [en]") if "English [en]" in lang_options else 0))
+language = st.selectbox("Language", lang_options, 
+                        index=(lang_options.index("English [en]") if "English [en]" in lang_options else 0))
 
-# Single search+select for Location (optional override)
-def fmt_opt(row): return f'{row.location_name} [{row.location_code}] — {row.location_type} / {row.country_iso_code}'
-opts = [fmt_opt(r) for r in loc_df.itertuples()]
-loc_pick = st.selectbox("Location (optional; overrides country)", [""] + opts)
+# Optional: More specific location override
+with st.expander("🔍 Advanced: Override with specific location (city/region)"):
+    st.info("By default, we use country-level location. Expand to select a specific city or region.")
+    
+    # Extract selected country ISO
+    selected_country_iso = country_selection.split("(")[1].split(")")[0] if "(" in country_selection else "GB"
+    
+    if st.checkbox("Use specific location instead of country"):
+        with st.spinner(f"Loading locations for {selected_country_iso}..."):
+            loc_df = get_locations(sess, headers, selected_country_iso.lower())
+        
+        if not loc_df.empty:
+            def fmt_opt(row): 
+                return f'{row.location_name} [{row.location_code}] — {row.location_type}'
+            opts = [fmt_opt(r) for r in loc_df.itertuples() if r.location_type != "Country"]
+            if opts:
+                specific_location = st.selectbox("Specific Location", opts)
+            else:
+                st.warning("No specific locations available for this country")
+                specific_location = None
+        else:
+            specific_location = None
+    else:
+        specific_location = None
 
-depth = st.slider("Depth", 10, 200, 100, 10)
-include_sub = st.checkbox("Include subdomains", True)
-organic_only = st.checkbox("Organic only", True)  # kept for future logic parity
+# Search parameters
+st.subheader("Search Parameters")
+col1, col2 = st.columns([1,1])
+with col1:
+    depth = st.slider("Depth", 10, 200, 100, 10, help="Number of search results to check")
+with col2:
+    include_sub = st.checkbox("Include subdomains", True, help="Check all subdomains of target domain")
 
 # Performance controls
-if mode.startswith("Live"):
-    colL1, colL2, colL3 = st.columns([1,1,1])
-    with colL1: parallel = st.slider("Live: parallel", 1, 24, 8, 1)
-    with colL2: rpm = st.slider("Live: RPM", 30, 1200, 240, 30)
-    with colL3: launch_delay = st.slider("Live: launch delay (s)", 0.0, 0.5, 0.0, 0.05)
-else:
-    colS1, colS2, colS3, colS4 = st.columns([1,1,1,1])
-    with colS1: tasks_per = st.slider("Std: tasks per POST", 10, 1000, 100, 10)
-    with colS2: max_inflight = st.slider("Std: max in-flight", 100, 5000, 500, 100)
-    with colS3: poll_iv = st.slider("Std: poll interval (s)", 0.2, 5.0, 1.0, 0.2)
-    with colS4: fetch_parallel = st.slider("Std: fetch parallel", 2, 48, 12, 2)
+with st.expander("⚙️ Performance Settings"):
+    if mode.startswith("Live"):
+        colL1, colL2, colL3 = st.columns([1,1,1])
+        with colL1: parallel = st.slider("Live: parallel", 1, 24, 8, 1)
+        with colL2: rpm = st.slider("Live: RPM", 30, 1200, 240, 30)
+        with colL3: launch_delay = st.slider("Live: launch delay (s)", 0.0, 0.5, 0.0, 0.05)
+    else:
+        colS1, colS2, colS3, colS4 = st.columns([1,1,1,1])
+        with colS1: tasks_per = st.slider("Std: tasks per POST", 10, 1000, 100, 10)
+        with colS2: max_inflight = st.slider("Std: max in-flight", 100, 5000, 500, 100)
+        with colS3: poll_iv = st.slider("Std: poll interval (s)", 0.2, 5.0, 1.0, 0.2)
+        with colS4: fetch_parallel = st.slider("Std: fetch parallel", 2, 48, 12, 2)
 
-keywords = st.text_area("Keywords (one per line)", height=200)
+# Keywords input
+st.subheader("Keywords")
+keywords = st.text_area("Enter keywords (one per line)", height=200, 
+                        placeholder="Enter your keywords here, one per line\nExample:\nseo tools\nkeyword research\nrank tracker")
 
 if "stop_evt" not in st.session_state:
     st.session_state.stop_evt = threading.Event()
 
+st.divider()
 c1, c2 = st.columns([1,1])
-run = c1.button("Run")
-stop = c2.button("Stop", type="secondary")
+run = c1.button("🚀 Run Rank Retrieval", type="primary", use_container_width=True)
+stop = c2.button("⏹️ Stop", type="secondary", use_container_width=True)
 
 if stop:
     st.session_state.stop_evt.set()
@@ -257,25 +341,44 @@ if stop:
 
 if run:
     st.session_state.stop_evt.clear()
+    
+    # Validation
     if not domain or " " in domain:
-        st.error("Enter a valid target domain (no spaces, no protocol)."); st.stop()
+        st.error("⚠️ Enter a valid target domain (no spaces, no protocol)."); st.stop()
     kws = [k.strip() for k in keywords.splitlines() if k.strip()]
     if not kws:
-        st.error("Paste at least one keyword."); st.stop()
+        st.error("⚠️ Please enter at least one keyword."); st.stop()
 
-    # Resolve location
+    # Resolve location code
     def parse_code(s: str) -> Optional[int]:
         if "[" in s and "]" in s:
             try: return int(s.split("[")[-1].split("]")[0])
             except: return None
         return None
-    loc_code = parse_code(loc_pick)
+    
+    # Check if using specific location override
+    if 'specific_location' in locals() and specific_location:
+        loc_code = parse_code(specific_location)
+    else:
+        # Use country-level location from country selection
+        loc_code = parse_code(country_selection)
+    
     if not loc_code:
-        loc_code = pick_country_code(loc_df, country_iso) if country_iso else None
-    if not loc_code:
-        st.error("No location resolved. Provide Country ISO or pick a Location."); st.stop()
+        st.error("❌ Could not resolve location code. Please try selecting a different country."); st.stop()
 
     lang_code = language.split("[")[-1].split("]")[0] if "[" in language else "en"
+    
+    # Display execution summary
+    st.info(f"""
+    **Execution Summary:**
+    - 🎯 Target: `{domain}`
+    - 🌍 Location Code: `{loc_code}`
+    - 🗣️ Language: `{lang_code}`
+    - 📱 Device: `{device}` ({os_name})
+    - 🔍 Depth: `{depth}`
+    - 📊 Keywords: `{len(kws)}`
+    - ⚡ Mode: `{mode}`
+    """)
 
     if mode.startswith("Live"):
         spacing = 60.0 / max(1, rpm)
@@ -321,9 +424,38 @@ if run:
             posted.extend(ids); idx += size
         rows = std_fetch(posted, headers, auth, poll_iv, fetch_parallel, lang_code, device, os_name, depth, st.session_state.stop_evt)
 
+    # Display results
     df = pd.DataFrame(rows)
     cols = ["keyword","found","organic_rank","absolute_rank","type","url","title",
             "language_code","se_domain","location_name","device","os","depth","note"]
     df = df.reindex(columns=cols)
-    st.dataframe(df, use_container_width=True)
-    st.download_button("Download CSV", df.to_csv(index=False).encode("utf-8"), "dataforseo_ranks.csv", "text/csv")
+    
+    st.divider()
+    st.subheader("📊 Results")
+    
+    # Summary metrics
+    found_count = df["found"].sum()
+    total_count = len(df)
+    col1, col2, col3 = st.columns(3)
+    col1.metric("Total Keywords", total_count)
+    col2.metric("Found", found_count)
+    col3.metric("Not Found", total_count - found_count)
+    
+    # Display table
+    st.dataframe(df, use_container_width=True, height=400)
+    
+    # Download button
+    csv = df.to_csv(index=False).encode("utf-8")
+    st.download_button(
+        label="📥 Download Results as CSV",
+        data=csv,
+        file_name=f"dataforseo_ranks_{domain}_{pd.Timestamp.now().strftime('%Y%m%d_%H%M%S')}.csv",
+        mime="text/csv",
+        use_container_width=True
+    )
+    
+    # Show sample of found results
+    if found_count > 0:
+        with st.expander("🎯 Found Rankings Preview"):
+            found_df = df[df["found"] == True][["keyword", "organic_rank", "absolute_rank", "url", "title"]].head(10)
+            st.dataframe(found_df, use_container_width=True)
