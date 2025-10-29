@@ -346,19 +346,20 @@ with col1:
 with col2:
     include_sub = st.checkbox("Include subdomains", True, help="Check all subdomains of target domain")
 
-# Performance controls
-with st.expander("⚙️ Performance Settings"):
-    if mode.startswith("Live"):
-        colL1, colL2, colL3 = st.columns([1,1,1])
-        with colL1: parallel = st.slider("Live: parallel", 1, 24, 8, 1)
-        with colL2: rpm = st.slider("Live: RPM", 30, 1200, 240, 30)
-        with colL3: launch_delay = st.slider("Live: launch delay (s)", 0.0, 0.5, 0.0, 0.05)
-    else:
-        colS1, colS2, colS3, colS4 = st.columns([1,1,1,1])
-        with colS1: tasks_per = st.slider("Std: tasks per POST", 10, 1000, 100, 10)
-        with colS2: max_inflight = st.slider("Std: max in-flight", 100, 5000, 500, 100)
-        with colS3: poll_iv = st.slider("Std: poll interval (s)", 0.2, 5.0, 1.0, 0.2)
-        with colS4: fetch_parallel = st.slider("Std: fetch parallel", 2, 48, 12, 2)
+# Set optimal performance parameters based on DataForSEO rate limits
+# DataForSEO allows 2000 requests/minute per account
+# We set conservative defaults to avoid rate limit errors
+if mode.startswith("Live"):
+    parallel = 10  # Parallel workers
+    rpm = 600  # Requests per minute (conservative to avoid rate limits)
+    launch_delay = 0.0  # No delay needed with proper rate limiting
+    st.info(f"ℹ️ **Live Mode Settings:** {parallel} parallel workers, max {rpm} requests/minute")
+else:
+    tasks_per = 100  # Tasks per POST request
+    max_inflight = 500  # Maximum in-flight tasks
+    poll_iv = 1.0  # Poll interval in seconds
+    fetch_parallel = 12  # Parallel fetch workers
+    st.info(f"ℹ️ **Standard Mode Settings:** {tasks_per} tasks/batch, {max_inflight} max in-flight, {fetch_parallel} parallel fetches")
 
 # Keywords input
 st.subheader("Keywords")
