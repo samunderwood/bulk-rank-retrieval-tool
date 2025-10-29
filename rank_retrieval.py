@@ -246,22 +246,13 @@ def standard_mode_rank_check(
                 status_code = task.get("status_code")
                 # 20100 = successfully created task
                 if status_code == 20100:
-                    result = task.get("result")
-                    if result:
-                        # Result can be a list or dict, handle both
-                        if isinstance(result, list) and result:
-                            task_id = result[0].get("id")
-                        elif isinstance(result, dict):
-                            task_id = result.get("id")
-                        else:
-                            task_id = None
-                        
-                        if task_id:
-                            task_ids.append(task_id)
-                        else:
-                            st.warning(f"⚠️ Task succeeded but no ID found. Result structure: {result}")
+                    # According to DataForSEO docs, for task_post the ID is directly in the task object
+                    # https://docs.dataforseo.com/v3/serp-google-type-task_post/
+                    task_id = task.get("id")
+                    if task_id:
+                        task_ids.append(task_id)
                     else:
-                        st.warning(f"⚠️ Task succeeded but result is empty")
+                        st.warning(f"⚠️ Task succeeded but no ID found in task object")
                 elif status_code != 20100:
                     # Log non-success status codes for debugging
                     st.warning(f"Task failed with status {status_code}: {task.get('status_message', 'Unknown error')}")
