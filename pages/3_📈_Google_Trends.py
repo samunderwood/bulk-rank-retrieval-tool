@@ -10,6 +10,8 @@ import plotly.graph_objects as go
 from datetime import datetime, timedelta
 from io import BytesIO
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import threading
 
 from ui_components import setup_page_config, render_credentials_sidebar
 from dataforseo_client import KeywordsDataClient
@@ -227,23 +229,21 @@ if run:
         - Time Range: {'Custom' if use_date_range else time_range}
     """)
     
-    # Execute batched requests
+    # Execute parallel requests
     try:
         all_results = []
         progress_bar = st.progress(0)
         status_text = st.empty()
+        completed = 0
+        lock = threading.Lock()
         
-        for idx, keyword in enumerate(kws):
-            # Update progress
-            progress = (idx + 1) / len(kws)
-            progress_bar.progress(progress)
-            status_text.text(f"Processing keyword {idx + 1} of {len(kws)}: '{keyword}'...")
-            
+        def process_keyword(idx, keyword):
+            """Process a single keyword."""
             try:
                 if mode == "Live":
                     # Live mode - immediate results
                     response = client.trends_explore_live(
-                        keywords=[keyword],  # Single keyword
+                        keywords=[keyword],
                         location_code=location_code,
                         location_name=location_name,
                         language_code=language_code,
@@ -271,46 +271,73 @@ if run:
                 
                 # Parse response
                 if response.get("status_code") != 20000:
-                    st.warning(f"API Error for '{keyword}': {response.get('status_message')}")
-                    continue
+                    return None
                 
                 tasks = response.get("tasks", [])
                 if not tasks:
-                    st.warning(f"No data for '{keyword}'")
-                    continue
+                    return None
                 
                 task = tasks[0]
                 
                 if mode == "Live":
                     # Live mode - results are immediate
                     if task.get("status_code") != 20000:
-                        st.warning(f"Task error for '{keyword}': {task.get('status_message')}")
-                        continue
+                        return None
                     
                     results = task.get("result", [])
                     if results:
-                        all_results.append({
+                        return {
                             "keyword": keyword,
                             "data": results[0],
                             "task_id": task.get("id")
-                        })
+                        }
                 else:
                     # Standard mode - store task ID for later retrieval
                     if task.get("status_code") != 20100:
-                        st.warning(f"Failed to post task for '{keyword}': {task.get('status_message')}")
-                        continue
+                        return None
                     
                     task_id = task.get("id")
                     if task_id:
-                        all_results.append({
+                        return {
                             "keyword": keyword,
                             "task_id": task_id,
                             "status": "pending"
-                        })
-            
+                        }
             except Exception as e:
-                st.warning(f"Error processing '{keyword}': {str(e)}")
-                continue
+                return None
+            
+            return None
+        
+        # Process keywords in parallel
+        # Live mode: 10 threads (rate limit: 250/min)
+        # Standard mode: 30 threads (rate limit: 2000/min)
+        max_workers = 10 if mode == "Live" else 30
+        
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            # Submit all tasks
+            future_to_keyword = {
+                executor.submit(process_keyword, idx, kw): kw 
+                for idx, kw in enumerate(kws)
+            }
+            
+            # Collect results as they complete
+            for future in as_completed(future_to_keyword):
+                keyword = future_to_keyword[future]
+                
+                try:
+                    result = future.result()
+                    if result:
+                        with lock:
+                            all_results.append(result)
+                except Exception as e:
+                    pass
+                
+                # Update progress
+                with lock:
+                    completed += 1
+                    progress = completed / len(kws)
+                    progress_bar.progress(progress)
+                    status_text.text(f"Processed {completed} of {len(kws)} keywords...")
         
         # Complete progress
         progress_bar.progress(1.0)
@@ -405,13 +432,19 @@ if run:
                 if item.get("type") == "google_trends_map":
                     map_data = item.get("data", [])
                     if map_data:
-                        # Get top region
-                        sorted_regions = sorted(map_data, key=lambda x: x.get("values", [0])[0] if x.get("values") else 0, reverse=True)
+                        # Get top region - safely handle None values
+                        def get_region_value(region):
+                            values = region.get("values", [])
+                            if values and len(values) > 0 and values[0] is not None:
+                                return values[0]
+                            return 0
+                        
+                        sorted_regions = sorted(map_data, key=get_region_value, reverse=True)
                         if sorted_regions:
                             top_region = sorted_regions[0]
                             row["top_region"] = top_region.get("geo_name")
-                            row["top_region_interest"] = top_region.get("values", [0])[0] if top_region.get("values") else 0
-                            row["num_regions"] = len([r for r in map_data if r.get("values") and r.get("values")[0] is not None])
+                            row["top_region_interest"] = get_region_value(top_region)
+                            row["num_regions"] = len([r for r in map_data if get_region_value(r) > 0])
             
             # Extract topics data
             for item in items:
