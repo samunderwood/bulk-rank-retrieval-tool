@@ -1,0 +1,95 @@
+---
+alwaysApply: true
+---
+
+# API Development Best Practices
+
+## 🎯 Core Principle: Documentation First, Implementation Second
+
+When working with ANY external API:
+
+1. **NEVER guess** API structure, endpoints, or response formats
+2. **ALWAYS verify** against official documentation
+3. **ASK the user** to search for and provide documentation links
+4. **WAIT for confirmation** before implementing
+5. **ADD documentation URLs** as comments in code
+
+## 📋 Implementation Workflow
+
+### Step 1: Request Documentation
+```
+"Before I implement [feature], could you please search for and 
+provide the official API documentation for [specific endpoint]?"
+```
+
+### Step 2: Verify Structure
+- Read the documentation page completely
+- Identify exact field paths and names
+- Note required vs optional parameters
+- Check response status codes
+- Verify data types
+
+### Step 3: Implement with References
+```python
+# According to [API Name] docs: [URL]
+# Response structure: path.to.field
+# Status: [success_code] = success, [error_code] = error
+def api_function():
+    # Implementation here
+```
+
+### Step 4: Handle All Cases
+- Success responses
+- Error responses
+- Edge cases mentioned in docs
+- Rate limits
+- Timeouts
+
+## 🚫 Red Flags - Stop and Verify
+
+If you find yourself:
+- Guessing where a field is located
+- Trying multiple field paths to see which works
+- Assuming structure based on similar APIs
+- Not sure what status code means success
+
+**STOP** → Ask user for documentation → Verify → Then implement
+
+## ✅ Quality Checklist
+
+Every API integration should have:
+- [ ] Documentation URL in code comments
+- [ ] Verified response structure
+- [ ] All status codes handled
+- [ ] Error messages reference specific codes
+- [ ] Type hints match documented types
+- [ ] Field paths confirmed from docs
+
+## 💡 Example: Good vs Bad
+
+### ❌ BAD - Guessing
+```python
+# Try to get the ID (guessing where it is)
+task_id = response.get("id") or response["data"]["id"]
+```
+
+### ✅ GOOD - Documented
+```python
+# According to DataForSEO Task POST docs:
+# https://docs.dataforseo.com/v3/serp/google/organic/task_post/
+# Response structure: tasks[].id (directly in task object)
+task_id = response.get("tasks", [{}])[0].get("id")
+```
+
+## 🔗 Common APIs in This Project
+
+- **DataForSEO**: See [dataforseo-api.mdc](mdc:.cursorrules/dataforseo-api.mdc)
+- Future APIs: Follow same documentation-first approach
+
+## 📝 When Adding New APIs
+
+1. Create a dedicated rule file: `.cursorrules/[api-name].mdc`
+2. Document verified response structures
+3. Include direct links to documentation
+4. Add examples of correct usage
+5. Note common pitfalls or non-obvious behavior
