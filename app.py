@@ -12,6 +12,8 @@ setup_page_config(title="DataForSEO SEO Tools", layout="wide")
 
 st.title("🚀 DataForSEO SEO Tools")
 
+st.info("💡 **Quick Tip:** Use the sidebar (←) to navigate between tools. Your credentials will persist across all pages!")
+
 st.markdown("""
 Welcome to the DataForSEO SEO Tools suite! This application provides powerful SEO analysis tools powered by DataForSEO APIs.
 
@@ -28,9 +30,15 @@ Track your website's search engine rankings for multiple keywords across differe
 - ✅ Historical results browser
 - ✅ Interactive charts & analytics
 - ✅ CSV & Excel export
+""")
 
-[→ Go to Rank Tracking](/1_📊_Rank_Tracking)
+col1, col2 = st.columns(2)
 
+with col1:
+    if st.button("📊 Go to Rank Tracking", use_container_width=True, type="primary"):
+        st.switch_page("pages/1_📊_Rank_Tracking.py")
+
+st.markdown("""
 ---
 
 ### 🔍 Search Volume
@@ -43,8 +51,13 @@ Get clickstream-based search volume data for up to 1000 keywords with 12 months 
 - ✅ Location-specific volume
 - ✅ Monthly trend charts
 - ✅ CSV & Excel export
+""")
 
-[→ Go to Search Volume](/2_🔍_Search_Volume)
+with col2:
+    if st.button("🔍 Go to Search Volume", use_container_width=True, type="primary"):
+        st.switch_page("pages/2_🔍_Search_Volume.py")
+
+st.markdown("""
 
 ---
 
