@@ -23,7 +23,15 @@ st.markdown("Get clickstream-based search volume data for up to 1000 keywords wi
 client = render_credentials_sidebar(KeywordsDataClient)
 
 if not client:
-    st.info("👈 Enter your DataForSEO credentials in the sidebar to get started.")
+    st.warning("👈 Please enter your DataForSEO credentials in the sidebar to get started.")
+    st.info("""
+        **Getting Started:**
+        1. Enter your DataForSEO login and password in the sidebar
+        2. Check 'Remember credentials' to keep them for your session
+        3. Start getting search volume data!
+        
+        Don't have credentials? Get them at [DataForSEO API Access](https://app.dataforseo.com/api-access)
+    """)
     st.stop()
 
 # Get available locations

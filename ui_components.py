@@ -100,8 +100,8 @@ def render_credentials_sidebar(client_class=DataForSEOClient) -> Optional[Tuple]
             st.error(f"Error creating client: {e}")
             return None
     else:
-        st.warning("⚠️ Please enter your DataForSEO login and password in the sidebar to continue.")
-        st.stop()
+        # Don't stop - let the page show a message instead
+        return None
 
 
 def verify_credentials(client: DataForSEOClient) -> bool:

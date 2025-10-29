@@ -197,8 +197,6 @@ class SERPClient(DataForSEOClient):
         return response.json()
 
 
-
-
 class BacklinksClient(DataForSEOClient):
     """
     Client for Backlinks API.

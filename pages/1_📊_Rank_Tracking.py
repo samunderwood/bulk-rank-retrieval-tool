@@ -33,11 +33,21 @@ st.title("DataForSEO Rank Retrieval")
 # Get authenticated client
 client = render_credentials_sidebar(client_class=SERPClient)
 
-# Verify credentials
-if client:
-    verify_credentials(client)
-else:
+# Check if we have credentials
+if not client:
+    st.warning("👈 Please enter your DataForSEO credentials in the sidebar to get started.")
+    st.info("""
+        **Getting Started:**
+        1. Enter your DataForSEO login and password in the sidebar
+        2. Check 'Remember credentials' to keep them for your session
+        3. Start tracking rankings!
+        
+        Don't have credentials? Get them at [DataForSEO API Access](https://app.dataforseo.com/api-access)
+    """)
     st.stop()
+
+# Verify credentials
+verify_credentials(client)
 
 # Initialize results history in session state
 if "results_history" not in st.session_state:
