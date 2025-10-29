@@ -25,7 +25,6 @@ setup_page_config(title="DataForSEO Rank Tool", layout="wide")
 
 # -------- UI --------
 st.title("DataForSEO Rank Retrieval")
-# Version: debug-v2
 
 # Get authenticated client
 client = render_credentials_sidebar(client_class=SERPClient)
@@ -57,10 +56,9 @@ with colA:
 
 with colB:
     device = st.radio("Device", ["desktop", "mobile"], horizontal=True)
-    os_name = st.selectbox(
-        "OS",
-        ["windows", "macos"] if device == "desktop" else ["android", "ios"]
-    )
+    # OS is set automatically: windows for desktop, android for mobile
+    # (Users rarely need to change this, and it clutters the UI)
+    os_name = "windows" if device == "desktop" else "android"
 
 # Language selector
 language_code = render_language_selector(
