@@ -1,0 +1,355 @@
+I think next it'd be nice to add a page for extracting keyword data.
+
+@https://dataforseo.com/help-center/what-is-clickstream-search-volume-and-how-to-get-it-with-dataforseo 
+
+The Bulk Clickstream Search Volume endpoint of DataForSEO Keywords Data API is designed to provide clickstream-based search volume data for up to 1000 keywords in a single Live request. What’s more, it offers historical search volume values for up to 12 months (depending on keywords, location, and language parameters).
+
+You can learn more about this endpoint in this Help Center article.
+Instead of ‘login’ and ‘password’ use your credentials from https://app.dataforseo.com/api-access
+# Instead of 'login' and 'password' use your credentials from https://app.dataforseo.com/api-access
+login="login"
+password="password"
+cred="$(printf ${login}:${password} | base64)"
+curl --location "https://api.dataforseo.com/v3/keywords_data/clickstream_data/bulk_search_volume/live" \
+--header "Authorization: Basic c3VwcG9ydEBkYXRhZm9yc2VvLmNvbTpTUnJYVHp2UGtFSjgzdXlz" \
+--header "Content-Type: application/json" \
+--data-raw '[
+    {
+        "location_code": 2840,
+        "tag": "test-tag",
+        "keywords": [
+            "you tube",
+            "youtube",
+            "youtub"
+        ]
+    }
+]'
+
+The above command returns JSON structured like this:
+{
+  "version": "0.1.20240801",
+  "status_code": 20000,
+  "status_message": "Ok.",
+  "time": "0.3889 sec.",
+  "cost": 0.0103,
+  "tasks_count": 1,
+  "tasks_error": 0,
+  "tasks": [
+    {
+      "id": "08201437-1535-0591-0000-e179eb1fba5f",
+      "status_code": 20000,
+      "status_message": "Ok.",
+      "time": "0.3607 sec.",
+      "cost": 0.0103,
+      "result_count": 1,
+      "path": [
+        "v3",
+        "keywords_data",
+        "clickstream_data",
+        "bulk_search_volume",
+        "live"
+      ],
+      "data": {
+        "api": "keywords_data",
+        "function": "bulk_search_volume",
+        "se": "clickstream_data",
+        "location_code": 2840,
+        "tag": "test-tag",
+        "keywords": [
+          "you tube",
+          "youtube",
+          "youtub"
+        ]
+      },
+      "result": [
+        {
+          "location_code": 2840,
+          "items_count": 3,
+          "items": [
+            {
+              "keyword": "youtub",
+              "search_volume": 418780,
+              "monthly_searches": [
+                {
+                  "year": 2024,
+                  "month": 7,
+                  "search_volume": 418780
+                },
+                {
+                  "year": 2024,
+                  "month": 6,
+                  "search_volume": 439710
+                },
+                {
+                  "year": 2024,
+                  "month": 5,
+                  "search_volume": 436562
+                },
+                {
+                  "year": 2024,
+                  "month": 4,
+                  "search_volume": 438434
+                },
+                {
+                  "year": 2024,
+                  "month": 3,
+                  "search_volume": 437668
+                },
+                {
+                  "year": 2024,
+                  "month": 2,
+                  "search_volume": 443624
+                },
+                {
+                  "year": 2024,
+                  "month": 1,
+                  "search_volume": 445666
+                },
+                {
+                  "year": 2023,
+                  "month": 12,
+                  "search_volume": 440136
+                },
+                {
+                  "year": 2023,
+                  "month": 11,
+                  "search_volume": 431861
+                },
+                {
+                  "year": 2023,
+                  "month": 10,
+                  "search_volume": 425703
+                },
+                {
+                  "year": 2023,
+                  "month": 9,
+                  "search_volume": 420420
+                },
+                {
+                  "year": 2023,
+                  "month": 8,
+                  "search_volume": 413230
+                }
+              ]
+            },
+            {
+              "keyword": "you tube",
+              "search_volume": 3986664,
+              "monthly_searches": [
+                {
+                  "year": 2024,
+                  "month": 7,
+                  "search_volume": 3986664
+                },
+                {
+                  "year": 2024,
+                  "month": 6,
+                  "search_volume": 4207200
+                },
+                {
+                  "year": 2024,
+                  "month": 5,
+                  "search_volume": 4130370
+                },
+                {
+                  "year": 2024,
+                  "month": 4,
+                  "search_volume": 4152322
+                },
+                {
+                  "year": 2024,
+                  "month": 3,
+                  "search_volume": 4224472
+                },
+                {
+                  "year": 2024,
+                  "month": 2,
+                  "search_volume": 4355926
+                },
+                {
+                  "year": 2024,
+                  "month": 1,
+                  "search_volume": 4445689
+                },
+                {
+                  "year": 2023,
+                  "month": 12,
+                  "search_volume": 4525497
+                },
+                {
+                  "year": 2023,
+                  "month": 11,
+                  "search_volume": 4520329
+                },
+                {
+                  "year": 2023,
+                  "month": 10,
+                  "search_volume": 4530924
+                },
+                {
+                  "year": 2023,
+                  "month": 9,
+                  "search_volume": 4560702
+                },
+                {
+                  "year": 2023,
+                  "month": 8,
+                  "search_volume": 4593340
+                }
+              ]
+            },
+            {
+              "keyword": "youtube",
+              "search_volume": 157924192,
+              "monthly_searches": [
+                {
+                  "year": 2024,
+                  "month": 7,
+                  "search_volume": 157924192
+                },
+                {
+                  "year": 2024,
+                  "month": 6,
+                  "search_volume": 166762144
+                },
+                {
+                  "year": 2024,
+                  "month": 5,
+                  "search_volume": 164564010
+                },
+                {
+                  "year": 2024,
+                  "month": 4,
+                  "search_volume": 164449749
+                },
+                {
+                  "year": 2024,
+                  "month": 3,
+                  "search_volume": 163587594
+                },
+                {
+                  "year": 2024,
+                  "month": 2,
+                  "search_volume": 164803434
+                },
+                {
+                  "year": 2024,
+                  "month": 1,
+                  "search_volume": 166157109
+                },
+                {
+                  "year": 2023,
+                  "month": 12,
+                  "search_volume": 164706784
+                },
+                {
+                  "year": 2023,
+                  "month": 11,
+                  "search_volume": 162002013
+                },
+                {
+                  "year": 2023,
+                  "month": 10,
+                  "search_volume": 159212953
+                },
+                {
+                  "year": 2023,
+                  "month": 9,
+                  "search_volume": 157132117
+                },
+                {
+                  "year": 2023,
+                  "month": 8,
+                  "search_volume": 154116528
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
+
+POST https://api.dataforseo.com/v3/keywords_data/clickstream_data/bulk_search_volume/live
+ Your account will be charged for each request.
+The cost can be calculated on the Pricing page.
+All POST data should be sent in the JSON format (UTF-8 encoding). The task setting is done using the POST method. When setting a task, you should send all task parameters in the task array of the generic POST array. You can send up to 2000 API calls per minute. The maximum number of requests that can be sent simultaneously is limited to 30.
+
+Below you will find a detailed description of the fields you can use for setting a task.
+
+Description of the fields for setting a task:
+
+Field name	Type	Description
+keywords	array	target keywords
+required field
+UTF-8 encoding
+maximum number of keywords you can specify in this array: 1000;
+each keyword should be at least 3 characters long;
+the keywords will be converted to lowercase format;
+Note: certain symbols and characters (e.g., UTF symbols, emojis) are not allowed
+to learn more about which symbols and characters can be used, please refer to this article
+learn more about rules and limitations of keyword and keywords fields in DataForSEO APIs in this Help Center article
+location_name	string	full name of the location
+required field if you don’t specify location_code
+Note: it is required to specify either location_name or location_code
+you can receive the list of available locations with their location_name by making a separate request to the
+https://api.dataforseo.com/v3/keywords_data/clickstream_data/locations_and_languages
+example:
+United Kingdom
+location_code	integer	location code
+required field if you don’t specify location_name
+Note: it is required to specify either location_name or location_code
+you can receive the list of available locations with their location_code by making a separate request to the
+https://api.dataforseo.com/v3/keywords_data/clickstream_data/locations_and_languages
+example:
+2840
+tag	string	user-defined task identifier
+optional field
+the character limit is 255
+you can use this parameter to identify the task and match it with the result
+you will find the specified tag value in the data object of the response
+‌
+
+As a response of the API server, you will receive JSON-encoded data containing a tasks array with the information specific to the set tasks.
+
+Description of the fields in the results array:
+
+Field name	Type	Description
+version	string	the current version of the API
+status_code	integer	general status code
+you can find the full list of the response codes here
+Note: we strongly recommend designing a necessary system for handling related exceptional or error conditions
+status_message	string	general informational message
+you can find the full list of general informational messages here
+time	string	execution time, seconds
+cost	float	total tasks cost, USD
+tasks_count	integer	the number of tasks in the tasks array
+tasks_error	integer	the number of tasks in the tasks array returned with an error
+tasks	array	array of tasks
+        id	string	task identifier
+unique task identifier in our system in the UUID format
+        status_code	integer	status code of the task
+generated by DataForSEO; can be within the following range: 10000-60000
+you can find the full list of the response codes here
+        status_message	string	informational message of the task
+you can find the full list of general informational messages here
+        time	string	execution time, seconds
+        cost	float	cost of the task, USD
+        result_count	integer	number of elements in the result array
+        path	array	URL path
+        data	object	contains the same parameters that you specified in the POST request
+        result	array	array of results
+            location_code	integer	location code in a POST array
+            items_count	integer	the number of results returned in the items array
+            items	array	contains keywords and related data
+                keyword	string	keyword
+keyword is returned with decoded %## (plus character ‘+’ will be decoded to a space character)
+                search_volume	integer	clickstream-based average monthly search volume rate
+represents the (approximate) number of searches for the given keyword idea based on clickstream
+you can learn more about clickstream search volume in this Help Center article
+                monthly_searches	array	monthly searches
+represents the (approximate) number of searches on this keyword idea (as available for the past twelve months), targeted to the specified geographic locations
+                    year	integer	year
+                    month	integer	month
+                    search_volume	integer	monthly average search volume rate

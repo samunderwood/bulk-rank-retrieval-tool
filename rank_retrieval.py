@@ -370,11 +370,12 @@ def fetch_task_results(
             task = response.get("tasks", [{}])[0]
             status_code = task.get("status_code")
             
-            # Status codes:
+            # Status codes per DataForSEO docs:
             # 20000 = OK (success)
-            # 5701 = Task In Queue (still processing - should continue polling)
+            # 40601 = Task Handed (received but not yet enqueued)
+            # 40602 = Task in Queue (enqueued for processing)
             # Other = actual error
-            if status_code == 5701:
+            if status_code in [40601, 40602]:
                 # Task still processing, return None to indicate "not ready yet"
                 return None
             elif status_code != 20000:
