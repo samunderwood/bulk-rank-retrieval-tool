@@ -11,7 +11,7 @@ from dataforseo_client import SERPClient
 
 
 def parse_serp_record(result: dict, keyword: str, lang: str, device: str, 
-                     os_name: str, depth: int, target_domain: str = None, debug_logs: list = None) -> dict:
+                     os_name: str, depth: int, target_domain: str = None) -> dict:
     """
     Parse a SERP result and extract rank information.
     
@@ -47,29 +47,16 @@ def parse_serp_record(result: dict, keyword: str, lang: str, device: str,
     all_items = result.get("items") or []
     items = [i for i in all_items if i.get("type") == "organic"]
     
-    # Thread-safe debug logging
-    if debug_logs is not None:
-        debug_logs.append(f"🔍 parse_serp_record for '{keyword}':")
-        debug_logs.append(f"   - Total items: {len(all_items)}")
-        debug_logs.append(f"   - Item types: {set(i.get('type') for i in all_items) if all_items else 'None'}")
-        debug_logs.append(f"   - Organic items: {len(items)}")
-        debug_logs.append(f"   - target_domain: {target_domain}")
-    
     if not items:
         record["note"] = f"No organic results found"
-        if debug_logs is not None:
-            debug_logs.append(f"   ⚠️ No organic items found")
         return record
     
     # If target_domain is specified, filter by domain (for Standard mode)
     if target_domain:
         from urllib.parse import urlparse
         
-        # Normalize target domain
-        target_clean = target_domain.lower().replace('www.', '').replace('http://', '').replace('https://', '').strip('/')
-        
-        if debug_logs is not None:
-            debug_logs.append(f"   - Filtering for domain: {target_clean}")
+        # Normalize target domain (remove protocol, www, trailing slash, path)
+        target_clean = target_domain.lower().replace('www.', '').replace('http://', '').replace('https://', '').strip('/').split('/')[0]
         
         matching_items = []
         for item in items:
@@ -79,21 +66,18 @@ def parse_serp_record(result: dict, keyword: str, lang: str, device: str,
                     parsed = urlparse(url if url.startswith('http') else f'http://{url}')
                     item_domain = parsed.netloc.lower().replace('www.', '')
                     
-                    # Check if domain matches (exact or subdomain)
+                    # Check if domain matches (exact match or item_domain is subdomain of target)
+                    # Examples:
+                    # - soundtrap.com == soundtrap.com ✓
+                    # - app.soundtrap.com contains .soundtrap.com ✓
+                    # - soundtrap.com.otherdomain.com contains .soundtrap.com but wrong ✗
                     if item_domain == target_clean or item_domain.endswith('.' + target_clean):
                         matching_items.append(item)
-                        if debug_logs is not None:
-                            debug_logs.append(f"   - ✅ MATCH: {item_domain} at rank {item.get('rank_absolute')}")
                 except:
                     continue
         
-        if debug_logs is not None:
-            debug_logs.append(f"   - Matching items found: {len(matching_items)}")
-        
         if not matching_items:
-            record["note"] = f"Domain not found in top {depth} results"
-            if debug_logs is not None:
-                debug_logs.append(f"   ⚠️ No matches for domain '{target_clean}'")
+            record["note"] = f"Not found in top {depth}"
             return record
         
         items = matching_items
@@ -152,7 +136,6 @@ def live_mode_rank_check(
     """
     spacing = 60.0 / max(1, rpm)
     rows = []
-    debug_logs = []  # Thread-safe debug log collection
     bar = st.progress(0.0, text="Submitting…")
     
     def live_worker(keyword: str):
@@ -180,31 +163,10 @@ def live_mode_rank_check(
         }]
         
         try:
-            # Thread-safe debug logging - show what we're sending
-            debug_logs.append(f"\n🔍 **Live Mode - '{keyword}':**")
-            debug_logs.append(f"   - Payload sent:")
-            debug_logs.append(f"      keyword: {payload[0]['keyword']}")
-            debug_logs.append(f"      target: {payload[0]['target']} (formatted from '{domain}')")
-            debug_logs.append(f"      location_code: {payload[0]['location_code']}")
-            debug_logs.append(f"      language_code: {payload[0]['language_code']}")
-            debug_logs.append(f"      device: {payload[0]['device']}")
-            debug_logs.append(f"      depth: {payload[0]['depth']}")
-            
             response = client.post_live(payload)
-            
-            debug_logs.append(f"   - Response status: {response.get('status_code')} - {response.get('status_message')}")
-            debug_logs.append(f"   - Tasks count: {len(response.get('tasks', []))}")
-            
             task = response.get("tasks", [{}])[0]
-            debug_logs.append(f"   - Task status: {task.get('status_code')} - {task.get('status_message')}")
-            debug_logs.append(f"   - Task result_count: {task.get('result_count')}")
             
             if task.get("status_code") != 20000:
-                if task.get("status_code") == 40102:
-                    debug_logs.append(f"   ❌ 40102 = Target '{payload[0]['target']}' not found in top {payload[0]['depth']} results")
-                    debug_logs.append(f"   💡 Note: We added wildcard to match all pages ('{domain}' → '{payload[0]['target']}')")
-                else:
-                    debug_logs.append(f"   ❌ Task failed with status {task.get('status_code')}")
                 return {
                     "keyword": keyword,
                     "found": False,
@@ -212,42 +174,15 @@ def live_mode_rank_check(
                 }
             
             result_list = task.get("result", [])
-            debug_logs.append(f"   - Result array length: {len(result_list)}")
-            
             if not result_list:
-                debug_logs.append(f"   ❌ No result array returned")
                 return {"keyword": keyword, "found": False, "note": "No result array"}
-            
-            result_obj = result_list[0]
-            debug_logs.append(f"   - Result keyword: {result_obj.get('keyword')}")
-            debug_logs.append(f"   - Result type: {result_obj.get('type')}")
-            debug_logs.append(f"   - Result se_results_count: {result_obj.get('se_results_count')}")
-            debug_logs.append(f"   - Result items_count: {result_obj.get('items_count')}")
-            debug_logs.append(f"   - Result items length: {len(result_obj.get('items', []))}")
-            
-            items = result_obj.get('items', [])
-            if items:
-                item_types = set(i.get('type') for i in items)
-                debug_logs.append(f"   - Item types found: {item_types}")
-                organic_items = [i for i in items if i.get('type') == 'organic']
-                debug_logs.append(f"   - Organic items count: {len(organic_items)}")
-                
-                if organic_items:
-                    debug_logs.append(f"   - First 3 organic URLs:")
-                    for idx, item in enumerate(organic_items[:3], 1):
-                        debug_logs.append(f"      {idx}. Rank {item.get('rank_absolute')}: {item.get('url')}")
-            else:
-                debug_logs.append(f"   ❌ No items in result object")
             
             return parse_serp_record(
                 result_list[0], keyword, language_code, device,
-                payload[0]["os"], depth, target_domain=None, debug_logs=debug_logs  # Live mode: target already filtered by API
+                payload[0]["os"], depth, target_domain=None  # Live mode: target already filtered by API
             )
             
         except Exception as e:
-            import traceback
-            debug_logs.append(f"❌ Exception in live_worker for '{keyword}': {e}")
-            debug_logs.append(f"   Traceback: {traceback.format_exc()}")
             return {"keyword": keyword, "found": False, "note": f"Error: {e}"}
     
     # Execute with rate limiting
@@ -281,30 +216,6 @@ def live_mode_rank_check(
         for kw in keywords:
             if kw not in done_keywords:
                 rows.append({"keyword": kw, "found": False, "note": "Stopped before start"})
-    
-    # Display debug logs after all threads complete
-    if debug_logs:
-        with st.expander("🐛 Debug Logs (Click to expand)", expanded=True):
-            for log in debug_logs:
-                st.text(log)
-        
-        # Check if all results are 40102 errors
-        error_40102_count = sum(1 for log in debug_logs if "40102" in str(log))
-        if error_40102_count > 0:
-            st.info(f"""
-                **ℹ️ About Status Code 40102 - No Search Results:**
-                
-                This means your target domain was **not found in the top results** for these keywords.
-                
-                **This could mean:**
-                - Your domain doesn't rank in the top {depth} positions for these keywords
-                - Try increasing the "Search Depth" parameter (e.g., 100 or 200)
-                - Try **Standard Mode** instead - it gets all results and filters client-side
-                
-                **Note:** Live mode with `target` parameter only returns results if your domain 
-                is found. Standard mode gets ALL results regardless, which is better for checking 
-                if you rank outside the top positions.
-            """)
     
     return rows
 
