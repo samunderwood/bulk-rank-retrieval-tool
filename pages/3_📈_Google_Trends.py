@@ -147,6 +147,26 @@ with col2:
     else:
         language_code = "en"
     
+    # Date range selector
+    st.write("**Time Range**")
+    col_date1, col_date2 = st.columns(2)
+    
+    with col_date1:
+        date_from = st.date_input(
+            "From",
+            value=datetime.now() - timedelta(days=30),  # Default 30 days
+            max_value=datetime.now(),
+            help="Start date for trend analysis"
+        )
+    
+    with col_date2:
+        date_to = st.date_input(
+            "To",
+            value=datetime.now(),
+            max_value=datetime.now(),
+            help="End date for trend analysis"
+        )
+    
     st.info("""
         **About Bulk Extraction:**
         
@@ -159,54 +179,28 @@ with col2:
 
 # Advanced settings expander
 with st.expander("⚙️ Advanced Settings"):
+    # Item types
+    st.write("**Data to retrieve (per keyword):**")
+    
     col_a, col_b = st.columns(2)
     
     with col_a:
-        # Date range
-        use_date_range = st.checkbox("Use custom date range", value=False)
-        
-        if use_date_range:
-            date_from = st.date_input(
-                "From",
-                value=datetime.now() - timedelta(days=365),
-                max_value=datetime.now()
-            )
-            date_to = st.date_input(
-                "To",
-                value=datetime.now(),
-                max_value=datetime.now()
-            )
-            time_range = None
-        else:
-            time_range = st.selectbox(
-                "Time Range",
-                options=[
-                    "past_7_days", "past_30_days", "past_90_days", 
-                    "past_12_months", "past_5_years", 
-                    "2004_present" if trends_type == "web" else "2008_present"
-                ],
-                index=1
-            )
-            date_from = None
-            date_to = None
-    
-    with col_b:
-        # Item types
-        st.write("Data to retrieve (per keyword):")
         get_graph = st.checkbox("Interest over time", value=True)
         get_map = st.checkbox("Regional interest", value=True)
+    
+    with col_b:
         get_topics = st.checkbox("Related topics", value=True)
         get_queries = st.checkbox("Related queries", value=True)
-        
-        item_types = []
-        if get_graph:
-            item_types.append("google_trends_graph")
-        if get_map:
-            item_types.append("google_trends_map")
-        if get_topics:
-            item_types.append("google_trends_topics_list")
-        if get_queries:
-            item_types.append("google_trends_queries_list")
+    
+    item_types = []
+    if get_graph:
+        item_types.append("google_trends_graph")
+    if get_map:
+        item_types.append("google_trends_map")
+    if get_topics:
+        item_types.append("google_trends_topics_list")
+    if get_queries:
+        item_types.append("google_trends_queries_list")
 
 st.divider()
 
@@ -221,6 +215,9 @@ if run:
         st.error("⚠️ Please enter at least one keyword.")
         st.stop()
     
+    # Calculate date range
+    date_range_days = (date_to - date_from).days
+    
     # Display execution summary
     st.info(f"""
         **Execution Summary:**
@@ -228,7 +225,7 @@ if run:
         - Keywords: {len(kws):,} keywords (processed individually)
         - Type: {trends_type}
         - Location: {selected_location}
-        - Time Range: {'Custom' if use_date_range else time_range}
+        - Time Range: {date_from.strftime('%Y-%m-%d')} to {date_to.strftime('%Y-%m-%d')} ({date_range_days} days)
     """)
     
     # Execute parallel requests
@@ -250,9 +247,8 @@ if run:
                         location_name=location_name,
                         language_code=language_code,
                         type=trends_type,
-                        date_from=date_from.strftime("%Y-%m-%d") if use_date_range and date_from else None,
-                        date_to=date_to.strftime("%Y-%m-%d") if use_date_range and date_to else None,
-                        time_range=time_range,
+                        date_from=date_from.strftime("%Y-%m-%d"),
+                        date_to=date_to.strftime("%Y-%m-%d"),
                         item_types=item_types if item_types else None,
                         tag=f"bulk_{idx}"
                     )
@@ -264,9 +260,8 @@ if run:
                         location_name=location_name,
                         language_code=language_code,
                         type=trends_type,
-                        date_from=date_from.strftime("%Y-%m-%d") if use_date_range and date_from else None,
-                        date_to=date_to.strftime("%Y-%m-%d") if use_date_range and date_to else None,
-                        time_range=time_range,
+                        date_from=date_from.strftime("%Y-%m-%d"),
+                        date_to=date_to.strftime("%Y-%m-%d"),
                         item_types=item_types if item_types else None,
                         tag=f"bulk_{idx}"
                     )
