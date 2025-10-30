@@ -25,6 +25,8 @@ st.markdown("Extract keyword popularity trends, regional interest, and discover 
 # Initialize session state for results
 if "gt_results_df" not in st.session_state:
     st.session_state.gt_results_df = None
+if "gt_full_data" not in st.session_state:
+    st.session_state.gt_full_data = {}
 if "gt_config" not in st.session_state:
     st.session_state.gt_config = {}
 
@@ -396,11 +398,15 @@ if run:
         
         # Process results into dataframe
         rows = []
+        full_data = {}  # Store complete trend data for charts
         
         for result in all_results:
             keyword = result["keyword"]
             data = result.get("data", {})
             items = data.get("items", [])
+            
+            # Store full data for this keyword
+            full_data[keyword] = data
             
             row = {
                 "keyword": keyword,
@@ -483,6 +489,7 @@ if run:
         
         # Store in session state
         st.session_state.gt_results_df = df
+        st.session_state.gt_full_data = full_data  # Store complete trend data
         st.session_state.gt_config = {
             "mode": mode,
             "type": trends_type,
@@ -510,6 +517,7 @@ if st.session_state.gt_results_df is not None:
     with col2:
         if st.button("🗑️ Clear Results", use_container_width=True):
             st.session_state.gt_results_df = None
+            st.session_state.gt_full_data = {}
             st.session_state.gt_config = {}
             st.rerun()
     
@@ -532,9 +540,96 @@ if st.session_state.gt_results_df is not None:
         st.dataframe(df, width="stretch", height=400)
     
     with tab2:
-        st.subheader("📈 Keyword Analysis")
+        st.subheader("📈 Keyword Trend Analysis")
         
+        # Get full trend data
+        full_data = st.session_state.gt_full_data
+        
+        if full_data:
+            # Keyword selector
+            keywords_with_data = [kw for kw in full_data.keys()]
+            
+            if keywords_with_data:
+                selected_kw = st.selectbox(
+                    "Select keyword to view trend:",
+                    options=keywords_with_data,
+                    help="Choose a keyword to see its interest over time"
+                )
+                
+                if selected_kw:
+                    kw_data = full_data[selected_kw]
+                    items = kw_data.get("items", [])
+                    
+                    # Find the graph data
+                    for item in items:
+                        if item.get("type") == "google_trends_graph":
+                            graph_data = item.get("data", [])
+                            
+                            if graph_data:
+                                # Extract data points
+                                dates = []
+                                values = []
+                                
+                                for point in graph_data:
+                                    date_from = point.get("date_from")
+                                    point_values = point.get("values", [])
+                                    
+                                    if date_from and point_values and point_values[0] is not None:
+                                        dates.append(date_from)
+                                        values.append(point_values[0])
+                                
+                                if dates and values:
+                                    # Create trend dataframe
+                                    trend_df = pd.DataFrame({
+                                        "date": pd.to_datetime(dates),
+                                        "interest": values
+                                    })
+                                    
+                                    # Line chart
+                                    fig = px.line(
+                                        trend_df,
+                                        x="date",
+                                        y="interest",
+                                        title=f"Interest Over Time: {selected_kw}",
+                                        labels={"interest": "Interest (0-100)", "date": "Date"}
+                                    )
+                                    fig.update_traces(line_color='#1f77b4', line_width=2)
+                                    fig.update_layout(
+                                        hovermode="x unified",
+                                        height=400,
+                                        xaxis_title="Date",
+                                        yaxis_title="Interest (0-100)"
+                                    )
+                                    st.plotly_chart(fig, use_container_width=True)
+                                    
+                                    # Stats for this keyword
+                                    col1, col2, col3, col4 = st.columns(4)
+                                    col1.metric("Average", f"{sum(values) / len(values):.1f}")
+                                    col2.metric("Peak", f"{max(values)}")
+                                    col3.metric("Lowest", f"{min(values)}")
+                                    col4.metric("Data Points", len(values))
+                                    
+                                    # Show the actual data
+                                    with st.expander("📊 View Data Points"):
+                                        st.dataframe(trend_df, width="stretch", height=300)
+                                else:
+                                    st.info(f"No trend data available for '{selected_kw}'")
+                            else:
+                                st.info(f"No trend data available for '{selected_kw}'")
+                            break
+                    else:
+                        st.info(f"No graph data found for '{selected_kw}'")
+            else:
+                st.info("No keywords with trend data available.")
+        else:
+            st.info("No trend data available. Make sure to select 'Interest over time' in Advanced Settings.")
+        
+        st.divider()
+        
+        # Overall statistics
         if "avg_interest" in df.columns:
+            st.subheader("Overall Statistics")
+            
             # Top keywords by interest
             top_keywords = df.nlargest(20, "avg_interest")
             
@@ -558,8 +653,6 @@ if st.session_state.gt_results_df is not None:
                 labels={"avg_interest": "Average Interest", "count": "Number of Keywords"}
             )
             st.plotly_chart(fig2, use_container_width=True)
-        else:
-            st.info("No interest data available for visualization.")
     
     with tab3:
         st.subheader("💾 Download Results")
