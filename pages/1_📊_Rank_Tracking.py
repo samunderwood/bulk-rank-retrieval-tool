@@ -47,7 +47,7 @@ if not client:
     st.stop()
 
 # Verify credentials
-verify_credentials(client)
+    verify_credentials(client)
 
 # Initialize results history in session state
 if "results_history" not in st.session_state:

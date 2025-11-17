@@ -652,23 +652,74 @@ if st.session_state.gt_results_df is not None:
     with tab3:
         st.subheader("💾 Download Results")
         
-        # CSV download
+        # CSV download (summary only)
         csv = df.to_csv(index=False)
         st.download_button(
-            label="📥 Download CSV",
+            label="📥 Download CSV (Summary)",
             data=csv,
-            file_name=f"google_trends_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+            file_name=f"google_trends_summary_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
             mime="text/csv",
             use_container_width=True
         )
         
-        # Excel download
+        # Create time series CSV with all trend data points
+        full_data = st.session_state.gt_full_data
+        if full_data:
+            st.write("---")
+            st.write("**Time Series Data (All Data Points)**")
+            
+            # Build comprehensive time series data
+            time_series_rows = []
+            
+            for keyword, kw_data in full_data.items():
+                items = kw_data.get("items", [])
+                
+                for item in items:
+                    if item.get("type") == "google_trends_graph":
+                        graph_data = item.get("data", [])
+                        
+                        for point in graph_data:
+                            date_from = point.get("date_from")
+                            point_values = point.get("values", [])
+                            
+                            if date_from and point_values and point_values[0] is not None:
+                                time_series_rows.append({
+                                    "keyword": keyword,
+                                    "date": date_from,
+                                    "interest": point_values[0]
+                                })
+                        break
+            
+            if time_series_rows:
+                ts_df = pd.DataFrame(time_series_rows)
+                
+                # CSV download for time series
+                ts_csv = ts_df.to_csv(index=False)
+                st.download_button(
+                    label="📥 Download Time Series CSV (All Data Points)",
+                    data=ts_csv,
+                    file_name=f"google_trends_timeseries_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                    mime="text/csv",
+                    use_container_width=True,
+                    help="All trend data points for each keyword"
+                )
+                
+                st.caption(f"Time series data contains {len(time_series_rows):,} data points across {len(full_data)} keywords")
+        
+        st.write("---")
+        st.write("**Excel Export (Multi-Sheet)**")
+        
+        # Excel download with multiple sheets
         buffer = BytesIO()
         with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
-            # Results sheet
-            df.to_excel(writer, sheet_name='Trends Data', index=False)
+            # Sheet 1: Summary data
+            df.to_excel(writer, sheet_name='Summary', index=False)
             
-            # Summary sheet
+            # Sheet 2: Time series data (if available)
+            if full_data and time_series_rows:
+                ts_df.to_excel(writer, sheet_name='Time Series', index=False)
+            
+            # Sheet 3: Statistics
             if "avg_interest" in df.columns:
                 summary_data = {
                     'Metric': ['Total Keywords', 'Avg Interest', 'Max Interest', 'Min Interest'],
@@ -679,12 +730,13 @@ if st.session_state.gt_results_df is not None:
                         f"{df['avg_interest'].min():.2f}"
                     ]
                 }
-                pd.DataFrame(summary_data).to_excel(writer, sheet_name='Summary', index=False)
+                pd.DataFrame(summary_data).to_excel(writer, sheet_name='Statistics', index=False)
         
         st.download_button(
-            label="📥 Download Excel (with Summary)",
+            label="📥 Download Excel (Complete Dataset)",
             data=buffer.getvalue(),
-            file_name=f"google_trends_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx",
+            file_name=f"google_trends_complete_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            use_container_width=True
+            use_container_width=True,
+            help="Excel file with Summary, Time Series, and Statistics sheets"
         )
